@@ -1,31 +1,23 @@
 use ropey::Rope;
 use arboard::Clipboard;
+use crate::{Tab,Buffer};
 
-#[derive(Eq,PartialEq)]
+#[derive(Eq,PartialEq,Debug)]
 pub enum Mode {
     Insert,
     Append,
     Select,
-    Normal
+    Normal,
+    Command,
 }
 
 use crate::util::event::{Config};
 pub struct App {
-    pub title: String,
     pub progress: f64,
     pub enhanced_graphics: bool,
-    pub x_pos: u16,
-    pub y_pos: u16,
-    pub start_select_pos: Option<usize>,
-    pub char_pos: usize,
-    pub mode: Mode,
-    pub clipboard: Clipboard,
-    pub text: Rope,
-    pub should_quit: bool,
-    pub past_states: Vec<Rope>,
-    pub future_states: Vec<Rope>,
-    pub file_path: Option<String>,
-    pub command_text: Option<String>
+    pub current_tab: u8,
+    pub tabs: Vec<Tab>,
+    pub buffers: Vec<Buffer>
 }
 
 impl App {
@@ -48,14 +40,18 @@ impl App {
                     enhanced_graphics,
                     mode: Mode::Normal,
                     start_select_pos: None,
+                    end_select_pos: None,
                     char_pos: 0,
                     past_states: vec![],
                     future_states: vec![],
                     x_pos: 0,
                     y_pos: 0,
+                    x_offset: 0,
+                    y_offset: 0,
                     file_path: Some(file_path),
                     text: rope,
                     command_text: None,
+                    last_char: None,
                 })
             },
             None => {
@@ -67,14 +63,18 @@ impl App {
                     enhanced_graphics,
                     mode: Mode::Normal,
                     start_select_pos: None,
+                    end_select_pos: None,
                     char_pos: 0,
                     past_states: vec![],
                     future_states: vec![],
                     x_pos: 0,
                     y_pos: 0,
+                    x_offset: 0,
+                    y_offset: 0,
                     file_path: None,
                     text: Rope::new(),
                     command_text: None,
+                    last_char: None,
                 })
             }
         }
@@ -116,6 +116,10 @@ impl App {
     pub fn end_of_current_line(&self) -> usize {
          self.text.line_to_char(self.y_pos as usize) + self.current_line_len()
     }
+    
+    pub fn start_of_current_line(&self) -> usize {
+         self.text.line_to_char(self.y_pos as usize)
+    }
 
     pub fn on_right(&mut self) {
         let chars = self.current_line_len();
@@ -135,6 +139,15 @@ impl App {
         }
     }
 
+    pub fn recenter(&mut self) {
+        if self.y_pos < 0_u16 {
+            self.on_down()
+        }
+        if self.y_pos < self.text.len_lines() as u16 {
+            self.on_up()
+        }
+    }
+
     pub fn get_cursor_idx(&self) -> usize {
          self.text.line_to_char(self.y_pos as usize) + self.x_pos as usize
     }
@@ -151,25 +164,52 @@ impl App {
     }
 
     pub fn get_selected_range(&self) -> Option<(usize,usize)> {
-        let end_idx = self.get_cursor_idx();
+        let mut offset = 0;
+        let mut end_idx = 0;
+        if let Some(end) = self.end_select_pos {
+            offset = 0;
+            end_idx = end;
+        } else {
+            offset = 1;
+            end_idx = self.get_cursor_idx();
+        }
         if let Some(start_idx) = self.start_select_pos {
             if start_idx > end_idx {
-                return Some((end_idx,start_idx+1));
+                return Some((end_idx,start_idx+offset));
             } else {
-                return Some((start_idx,end_idx+1));
+                return Some((start_idx,end_idx+offset));
             }
         }
         None
     }
 
-    pub fn on_key(&mut self, c: char,_config: &Config) {
+    pub fn parse_command(&mut self,_config: &Config) {
+        if let Some(command_text) = &self.command_text {
+            match &command_text.replace(":","") as &str {
+                "q" => {
+                    self.should_quit = true;
+                },
+                "w" => {
+                    let _ = self.on_save();
+                },
+                "tabnew" => {
+                    ()
+                },
+                "vs" => {
+                    ()
+                },
+                "sp" => {
+                    ()
+                },
+                _ => {
+                    self.command_text = Some("Unreconginzed command".to_string());
+              }
+            }
+        }
+    }
+
+    pub fn on_key(&mut self, c: char,config: &Config) {
         match c {
-            'q'  if self.mode == Mode::Normal => {
-                self.should_quit = true;
-            },
-            'w'  if self.mode == Mode::Normal => {
-                let _ = self.on_save();
-            },
             'a' if self.mode == Mode::Normal => {
                 self.mode = Mode::Append;
             },
@@ -204,6 +244,8 @@ impl App {
                         self.clipboard.set_text(selected_text.to_owned()).expect("Could not set value to system clipboard");
                     }
                 }
+                self.start_select_pos = None;
+                self.end_select_pos = None;
             },
             'p' if self.mode == Mode::Select => {
                 self.mode = Mode::Normal;
@@ -227,25 +269,42 @@ impl App {
                 let idx = self.get_cursor_idx();
                 self.start_select_pos = Some(idx);
             },
+            'V' if self.mode == Mode::Normal => {
+                self.mode = Mode::Select;
+                let idx = self.get_cursor_idx();
+                self.start_select_pos = Some(idx);
+                self.end_select_pos = Some(self.end_of_current_line());
+            },
             'u' if self.mode == Mode::Normal => {
                 if let Some(past_state) = self.past_states.pop() {
                     self.future_states.push(self.text.clone());
                     self.text = past_state;
+                    self.recenter();
                 }
-            }
+            },
             'r' if self.mode == Mode::Normal => {
                 if let Some(future_state) = self.future_states.pop() {
                     self.text = future_state;
                 }
             },
+            'd' if self.mode == Mode::Normal => {
+                if self.last_char == Some('d') {
+                    self.future_states = vec![];
+                    self.past_states.push(self.text.clone());
+                    let _ = self.text.try_remove(self.start_of_current_line()..self.end_of_current_line());
+                    self.recenter();
+                }
+             },
             'd' if self.mode == Mode::Select => {
                 self.mode = Mode::Normal;
                 if let Some((start_idx,end_idx)) = self.get_selected_range() {
                     self.future_states = vec![];
                     self.past_states.push(self.text.clone());
                     let _ = self.text.try_remove(start_idx..end_idx);
+                    self.recenter();
                 }
                 self.start_select_pos = None;
+                self.end_select_pos = None;
             },
             '\n' if self.mode == Mode::Insert => {
                 let char_idx = self.get_cursor_idx();
@@ -254,6 +313,9 @@ impl App {
                 let _ = self.text.try_insert_char(char_idx,c);
                 self.x_pos = 0;
                 self.on_down();
+            },
+            '\n' if self.mode == Mode::Command => {
+                self.parse_command(config);
             },
             '\n' if self.mode == Mode::Append => {
                 let char_idx = self.get_cursor_idx() + 1;
@@ -275,6 +337,11 @@ impl App {
                     self.x_pos += 1;
                 }
             },
+            _ if self.mode == Mode::Command => {
+                self.command_text =  self.command_text.clone().map(|mut t| {
+                    t.push_str(&c.to_string()); 
+                    t});
+            },
             _ if self.mode == Mode::Append => {
                 self.past_states.push(self.text.clone());
                 self.future_states = vec![];
@@ -290,5 +357,13 @@ impl App {
     }
 
     pub fn on_tick(&mut self) {
+    }
+
+    pub fn set_command_mode(&mut self) {
+        self.mode = Mode::Command
+    }
+
+    pub fn set_normal_mode(&mut self) {
+        self.mode = Mode::Normal
     }
 }

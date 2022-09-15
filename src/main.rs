@@ -1,4 +1,8 @@
 mod app;
+mod tab;
+mod window;
+mod buffer;
+mod command_parser;
 mod ui;
 mod util;
 
@@ -35,14 +39,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         ..Config::default()
     };
     let events = Events::with_config(config.clone());
-
     let mut app = App::new(true, cli.file_name)?;
+    //env_logger::init();
     loop {
-        terminal.draw(|f| {
-            ui::draw(f, &mut app);
-            f.set_cursor(app.x_pos,app.y_pos)
+        if !app.should_quit {
+            terminal.draw(|f| {
+                ui::draw(f, &mut app);
+                f.set_cursor(app.x_pos,app.y_pos + app.y_offset)
+            })?;
         }
-            )?;
         match events.next()? {
             Event::Input(key) => match key {
                 Key::Up => {
@@ -64,13 +69,26 @@ fn main() -> Result<(), Box<dyn Error>> {
                     app.on_right();
                 }
                 Key::Esc => {
-                    if app.mode == app::Mode::Insert || app.mode == app::Mode::Append {
+                    if app.mode == app::Mode::Insert || app.mode == app::Mode::Append || app.mode == app::Mode::Select {
                         app.start_select_pos = None;
-                        app.mode = app::Mode::Normal
+                        app.set_normal_mode();
+                    }
+                    if app.mode == app::Mode::Command {
+                        app.set_normal_mode();
                     }
                 }
+                Key::Char(c) if c == ':' => {
+                    app.command_text = Some("".to_string());
+                    app.set_command_mode();
+                    app.on_key(c, &config);
+                },
                 Key::Char(c) => {
                     app.on_key(c, &config);
+                    if app.mode == app::Mode::Normal {
+                        app.last_char = Some(c);
+                    } else {
+                        app.last_char = None;
+                    }
                 }
                 _ => {}
             },

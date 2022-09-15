@@ -17,13 +17,28 @@ use tui::{
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let area = Layout::default()
         .constraints([Constraint::Percentage(10), 
-                      Constraint::Percentage(85),
-                      Constraint::Percentage(5),
+                      Constraint::Percentage(80),
+                      Constraint::Percentage(10),
                      ].as_ref())
         .split(f.size());
-
+    let text_area = area[1];
+    /*
+     * nest a layout
+    let text_splits= Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Percentage(50),
+                Constraint::Percentage(50),
+            ]
+            .as_ref(),
+        )
+        .split(text_area);
+        */
+    app.y_offset = area[0].bottom();
     draw_header(f, app,area[0]);
-    draw_first_tab(f, app, area[1]);
+    draw_first_tab(f, app, text_area);
+    //draw_first_tab(f, app, text_splits[1]);
     draw_footer(f, app,area[2]);
 }
 
@@ -48,13 +63,14 @@ fn draw_footer<B>(f: &mut Frame<B>, app: &mut App, area: Rect)
 where
     B: Backend,
 {
-    let block = Block::default().title(Span::styled(
-        format!("{},{}",app.y_pos, app.x_pos),
-        Style::default()))
-        .title_alignment(Alignment::Right);
-    let text = app.command_text.clone().unwrap_or("".to_string());
-    let paragraph = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
+    let block = Block::default().borders(Borders::ALL);
+    //let text = app.command_text.clone().unwrap_or("test".to_string());
+    let paragraph = Paragraph::new(app.command_text.clone().unwrap_or("".to_string())).block(block.clone()).alignment(Alignment::Left).wrap(Wrap { trim: true });
+    let paragraph2 = Paragraph::new(format!("{:?}",app.mode)).block(block.clone()).alignment(Alignment::Center).wrap(Wrap { trim: true });
+    let paragraph3 = Paragraph::new(format!("{},{}",app.y_pos, app.x_pos)).block(block).alignment(Alignment::Right).wrap(Wrap { trim: true });
     f.render_widget(paragraph, area);
+    f.render_widget(paragraph2, area);
+    f.render_widget(paragraph3, area);
 }
 
 fn draw_header<B>(f: &mut Frame<B>, app: &mut App, area: Rect)

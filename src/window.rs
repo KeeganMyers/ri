@@ -6,6 +6,11 @@ pub struct WindowPosition {
     pub x: u32,
 }
 
+pub struct Window {
+    pub title: String,
+    pub should_quit: bool,
+}
+
 #[derive(Debug, Copy, Clone)]
 pub struct WindowSize {
     pub height: u32,

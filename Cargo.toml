@@ -13,6 +13,7 @@ tui = "0.16.0"
 env_logger = "0.8.3"
 argh = "0.1.5"
 syntect = "4.6.0"
+log = "0.4.17"
 
 #![feature(alloc_system)]
 #![feature(global_allocator, allocator_api)]
