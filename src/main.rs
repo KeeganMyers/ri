@@ -1,17 +1,23 @@
 mod app;
-mod tab;
 mod window;
 mod buffer;
-mod command_parser;
 mod ui;
 mod util;
+pub mod command;
 
+pub use command::{Command,normal_command::NormalCommand};
+use std::sync::Arc;
 use argh::FromArgs;
 use termion::{event::Key,input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
-use crate::{app::App};
+use crate::{app::App,buffer::Buffer,window::Window};
 use util::event::{Config, Event, Events};
 use std::{error::Error, io, time::Duration};
 use tui::{backend::TermionBackend, Terminal};
+extern crate strum;
+#[macro_use]
+extern crate strum_macros;
+#[macro_use]
+extern crate serde_derive;
 
 /// Termion demo
 #[derive(Debug, FromArgs)]
@@ -39,63 +45,17 @@ fn main() -> Result<(), Box<dyn Error>> {
         ..Config::default()
     };
     let events = Events::with_config(config.clone());
-    let mut app = App::new(true, cli.file_name)?;
+    let mut app = Arc::new(App::new(cli.file_name)?);
     //env_logger::init();
     loop {
         if !app.should_quit {
             terminal.draw(|f| {
-                ui::draw(f, &mut app);
-                f.set_cursor(app.x_pos,app.y_pos + app.y_offset)
+                ui::draw(f, Arc::get_mut(&mut app).unwrap());
+                f.set_cursor(app.x_pos(),app.y_pos())
             })?;
         }
-        match events.next()? {
-            Event::Input(key) => match key {
-                Key::Up => {
-                    app.on_up();
-                }
-                Key::Backspace if app.mode == app::Mode::Insert || app.mode == app::Mode::Append  => {
-                    app.remove_char();
-                }
-                Key::Backspace if app.mode == app::Mode::Normal => {
-                    app.on_left();
-                }
-                Key::Down => {
-                    app.on_down();
-                }
-                Key::Left => {
-                    app.on_left();
-                }
-                Key::Right => {
-                    app.on_right();
-                }
-                Key::Esc => {
-                    if app.mode == app::Mode::Insert || app.mode == app::Mode::Append || app.mode == app::Mode::Select {
-                        app.start_select_pos = None;
-                        app.set_normal_mode();
-                    }
-                    if app.mode == app::Mode::Command {
-                        app.set_normal_mode();
-                    }
-                }
-                Key::Char(c) if c == ':' => {
-                    app.command_text = Some("".to_string());
-                    app.set_command_mode();
-                    app.on_key(c, &config);
-                },
-                Key::Char(c) => {
-                    app.on_key(c, &config);
-                    if app.mode == app::Mode::Normal {
-                        app.last_char = Some(c);
-                    } else {
-                        app.last_char = None;
-                    }
-                }
-                _ => {}
-            },
-            Event::Tick => {
-                app.on_tick();
-            }
-        }
+
+        Arc::get_mut(&mut app).unwrap().on_event(events.next()?,&config);
         if app.should_quit {
             break;
         }
