@@ -1,4 +1,6 @@
 use crate::util::event::{Config, Event, Events};
+use syntect::{parsing::{SyntaxReference,SyntaxSet},highlighting::ThemeSet};
+use std::ops::Deref;
 use crate::{Buffer, Window};
 use arboard::Clipboard;
 use ropey::Rope;
@@ -34,6 +36,9 @@ pub enum Mode {
 pub struct App {
     // pub current_tab: u8,
     // pub tabs: Option<Vec<Tab>>,
+    pub syntax_set: SyntaxSet,
+    pub theme_set: ThemeSet,
+    pub syntax: SyntaxReference ,
     pub current_window: u8,
     pub windows: Vec<Window>,
     pub buffers: Vec<Buffer>,
@@ -55,8 +60,21 @@ impl App {
             .map(|b| b.x_pos)
             .unwrap_or_default()
     }
+    pub fn display_x_pos(&self) -> u16 {
+        self.buffers
+            .get(self.current_buffer)
+            .map(|b| b.x_pos + b.x_offset)
+            .unwrap_or_default()
+    }
 
     pub fn y_pos(&self) -> u16 {
+        self.buffers
+            .get(self.current_buffer)
+            .map(|b| b.y_pos)
+            .unwrap_or_default()
+    }
+
+    pub fn display_y_pos(&self) -> u16 {
         self.buffers
             .get(self.current_buffer)
             .map(|b| b.y_pos + b.y_offset)
@@ -66,6 +84,12 @@ impl App {
     pub fn set_y_offset(&mut self, offset: u16) {
         if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
             buffer.y_offset = offset
+        }
+    }
+
+    pub fn set_x_offset(&mut self, offset: u16) {
+        if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
+            buffer.x_offset = offset
         }
     }
 
@@ -153,12 +177,20 @@ impl App {
             }
         }
     }
+
     pub fn new(file_name: Option<String>) -> Result<App, std::io::Error> {
+
         match Buffer::new(file_name) {
             Ok(buffer) => {
+            let ps = SyntaxSet::load_defaults_newlines();
+            let ts = ThemeSet::load_defaults();
+            let syntax = ps.find_syntax_by_extension("rs").clone();
                 Ok(Self {
                     //current_tab: 0,
                     //tabs: None,
+                    syntax_set: ps.clone(),
+                    theme_set: ts,
+                    syntax: syntax.clone().unwrap().to_owned(),
                     current_window: 0,
                     current_buffer: 0,
                     buffers: vec![buffer],

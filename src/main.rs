@@ -19,8 +19,13 @@ extern crate strum_macros;
 #[macro_use]
 extern crate serde_derive;
 
-/// Termion demo
+use syntect::easy::HighlightLines;
+use syntect::parsing::SyntaxSet;
+use syntect::highlighting::{ThemeSet, Style};
+use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
+
 #[derive(Debug, FromArgs)]
+#[argh(description = "")]
 struct Cli {
     /// time in ms between two ticks.
     #[argh(option, default = "250")]
@@ -51,7 +56,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         if !app.should_quit {
             terminal.draw(|f| {
                 ui::draw(f, Arc::get_mut(&mut app).unwrap());
-                f.set_cursor(app.x_pos(),app.y_pos())
+                f.set_cursor(app.display_x_pos(),app.display_y_pos())
             })?;
         }
 
