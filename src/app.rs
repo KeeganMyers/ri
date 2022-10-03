@@ -77,7 +77,7 @@ impl App {
     pub fn display_y_pos(&self) -> u16 {
         self.buffers
             .get(self.current_buffer)
-            .map(|b| b.y_pos + b.y_offset)
+            .map(|b| (b.y_pos + b.y_offset) - b.current_page)
             .unwrap_or_default()
     }
 
@@ -93,11 +93,23 @@ impl App {
         }
     }
 
+    pub fn set_current_page(&mut self, page: u16) {
+        if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
+            buffer.current_page = page
+        }
+    }
+
     pub fn mode(&self) -> Mode {
         self.buffers
             .get(self.current_buffer)
             .map(|b| b.mode.clone())
             .unwrap_or(Mode::Normal)
+    }
+
+    pub fn current_page(&self) -> Option<u16> {
+        self.buffers
+            .get(self.current_buffer)
+            .map(|b| b.current_page)
     }
 
     pub fn command_text(&self) -> Option<String> {
@@ -109,6 +121,11 @@ impl App {
         if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
             buffer.command_text = Some(text.to_owned())
         }
+    }
+
+    pub fn window(&self) -> Option<&Window> {
+        self.windows
+            .get(self.current_window as usize)
     }
 
     pub fn text(&self) -> Option<Rope> {

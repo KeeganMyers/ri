@@ -50,12 +50,24 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
             .as_ref()
         )
         .split(text_area);
-    app.set_y_offset(area[0].bottom() + 1);
+    app.set_y_offset(text_area.top() + 1);
     app.set_x_offset(1);
     draw_header(f, app,area[0]);
     for (split,window) in text_splits.iter().zip(app.windows.iter()) {
         draw_text(f,app,split,window)
     }
+    /*
+    if let Some(window) = app.window() {
+        if app.y_pos() != 0 && (app.y_pos() % window.page_size) == 0 {
+            if app.y_pos() < (window.page_size * window.current_page) {
+             app.set_current_page(window.current_page - window.page_size);
+            } else {
+             app.set_current_page(window.current_page + window.page_size);
+            }
+        }
+    }
+    */
+
     draw_footer(f, app,area[2]);
 }
 
@@ -63,21 +75,38 @@ fn draw_text<B>(f: &mut Frame<B>, app: &App, area: &Rect,window: &Window)
 where
     B: Backend,
 {
-    //TODO: process this ahead of time
     let mut highlight = HighlightLines::new(&app.syntax, &app.theme_set.themes["base16-ocean.dark"]);
     let block = Block::default().borders(Borders::ALL);
     let mut spans: Vec<Spans> = vec![];
 
     if let Some(text) = app.buffer_at(window.buffer_idx as usize) {
-        for line in text.lines_at(app.y_pos() as usize) {
+        for line in text.lines() {
+        //for line in text.lines_at(app.y_pos() as usize) {
             if let Some(l) = line.as_str() {
                 if let Ok(highlights) = highlight.highlight_line(l, &app.syntax_set) {
                     spans.push(to_spans(highlights));
                 }
             }
         }
-        let paragraph = Paragraph::new(spans).block(block).wrap(Wrap { trim: false });
+        let y_cursor = if app.display_y_pos() >= area.bottom() {
+            area.bottom() - 3
+        } else {
+            app.display_y_pos()
+        };
+
+        let x_cursor = if app.display_x_pos() >= area.right() {
+            area.right() - 1
+        } else {
+            app.display_x_pos()
+        };
+
+        let paragraph = if let Some(current_page) = app.current_page() {
+            Paragraph::new(spans).alignment(Alignment::Left).wrap(Wrap {trim: false}).block(block).scroll((current_page ,app.x_pos()))
+        } else {
+            Paragraph::new(spans).alignment(Alignment::Left).wrap(Wrap {trim: false}).block(block)
+        };
         f.render_widget(paragraph, *area);
+        f.set_cursor(x_cursor,y_cursor);
     }
 }
 

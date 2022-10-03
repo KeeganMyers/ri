@@ -22,7 +22,9 @@ pub struct Buffer {
     pub mode: Mode,
     pub clipboard: Clipboard,
     pub text: Rope,
-    pub title: String
+    pub title: String,
+    pub page_size: u16,
+    pub current_page: u16,
 }
 
 impl Buffer {
@@ -47,11 +49,17 @@ impl Buffer {
         if self.y_pos > 0 {
             self.y_pos -= 1;
         }
+        if self.y_pos != 0 && (self.y_pos % self.page_size) == 0 {
+            self.current_page -= self.page_size;
+        }
     }
 
     pub fn on_down(&mut self) {
         if self.y_pos < self.text.len_lines() as u16 - 1{
             self.y_pos += 1;
+        }
+        if self.y_pos != 0 && (self.y_pos % self.page_size) == 0 {
+            self.current_page += self.page_size;
         }
     }
 
@@ -340,6 +348,8 @@ impl Buffer {
                     text: rope,
                     command_text: None,
                     last_char: None,
+                    current_page: 0,
+                    page_size: 10,
                 })
             },
             None => {
@@ -361,6 +371,8 @@ impl Buffer {
                     text: Rope::new(),
                     command_text: None,
                     last_char: None,
+                    current_page: 0,
+                    page_size: 10,
                 })
             }
         }

@@ -18,6 +18,8 @@ extern crate strum;
 extern crate strum_macros;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate log;
 
 use syntect::easy::HighlightLines;
 use syntect::parsing::SyntaxSet;
@@ -49,6 +51,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         tick_rate: Duration::from_millis(250),
         ..Config::default()
     };
+    // Set max_log_level to Trace
+    tui_logger::init_logger(log::LevelFilter::Trace).unwrap();
+
+    // Set default level for unknown targets to Trace
+    tui_logger::set_default_level(log::LevelFilter::Trace);
     let events = Events::with_config(config.clone());
     let mut app = Arc::new(App::new(cli.file_name)?);
     //env_logger::init();
@@ -56,7 +63,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         if !app.should_quit {
             terminal.draw(|f| {
                 ui::draw(f, Arc::get_mut(&mut app).unwrap());
-                f.set_cursor(app.display_x_pos(),app.display_y_pos())
             })?;
         }
 

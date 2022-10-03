@@ -21,6 +21,7 @@ serde_derive = "1.0.144"
 serde_plain = "1.0.0"
 anyhow = "1.0.65"
 syntect = "5.0.0"
+tui-logger = "0.8.0"
 
 #![feature(alloc_system)]
 #![feature(global_allocator, allocator_api)]
