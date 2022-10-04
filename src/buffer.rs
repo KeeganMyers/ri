@@ -137,9 +137,96 @@ impl Buffer {
         None
     }
 
+    pub fn execute_visual(&mut self, c: char,config: &Config) -> AnyHowResult<()> {
+        match c {
+            'y' => {
+                self.mode = Mode::Normal;
+                if let Some((start_idx,end_idx)) = self.get_selected_range() {
+                    if let Some(selected_text) = self.text.slice(start_idx..end_idx).as_str() {
+                        self.clipboard.set_text(selected_text.to_owned()).expect("Could not set value to system clipboard");
+                    }
+                }
+                self.start_select_pos = None;
+                self.end_select_pos = None;
+            },
+            'p' => {
+                self.mode = Mode::Normal;
+                if let Some((start_idx,end_idx)) = self.get_selected_range() {
+                    let coppied_text = self.clipboard.get_text().expect("Could not set value to system clipboard");
+                    self.past_states.push(self.text.clone());
+                    self.future_states = vec![];
+                    let _ = self.text.try_remove(start_idx..end_idx);
+                    let _ = self.text.try_insert(start_idx,&coppied_text);
+                }
+            },
+            'd' => {
+                self.mode = Mode::Normal;
+                if let Some((start_idx,end_idx)) = self.get_selected_range() {
+                    self.future_states = vec![];
+                    self.past_states.push(self.text.clone());
+                    let _ = self.text.try_remove(start_idx..end_idx);
+                    self.recenter();
+                }
+                self.start_select_pos = None;
+                self.end_select_pos = None;
+            },
+            _ => ()
+        }
+        Ok(())
+    }
+
+    pub fn execute_append(&mut self, c: char,config: &Config) -> AnyHowResult<()> {
+        match c {
+            '\n' if self.mode == Mode::Append => {
+                let char_idx = self.get_cursor_idx() + 1;
+                self.past_states.push(self.text.clone());
+                self.future_states = vec![];
+                if self.text.try_insert_char(char_idx,c).is_ok() {
+                    self.y_pos += 1;
+                    self.x_pos = 0;
+                } else if self.text.try_insert_char(char_idx - 1,c).is_ok() {
+                    self.y_pos += 1;
+                    self.x_pos = 0;
+                }
+            },
+            _ => {
+                self.past_states.push(self.text.clone());
+                self.future_states = vec![];
+                let char_idx = self.get_cursor_idx() + 1;
+                if  self.text.try_insert_char(char_idx,c).is_ok() {
+                    self.x_pos += 1;
+                } else if self.text.try_insert_char(char_idx - 1,c).is_ok() {
+                    self.x_pos += 1;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub fn execute_insert(&mut self, c: char,config: &Config) -> AnyHowResult<()> {
+        match c {
+            '\n' => {
+                let char_idx = self.get_cursor_idx();
+                self.past_states.push(self.text.clone());
+                self.future_states = vec![];
+                let _ = self.text.try_insert_char(char_idx,c);
+                self.x_pos = 0;
+                self.on_down();
+            },
+            _ => {
+                self.past_states.push(self.text.clone());
+                self.future_states = vec![];
+                let char_idx = self.get_cursor_idx();
+                if  self.text.try_insert_char(char_idx,c).is_ok() {
+                    self.x_pos += 1;
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn execute_normal(&mut self, c: char,config: &Config) -> AnyHowResult<()> {
         let tokens = NormalCommand::tokenize(c.to_string());     
-        self.command_text = Some(format!("{:?}",NormalCommand::parse(tokens.clone())));
         for command in NormalCommand::parse(tokens)? {
             match command {
                 NormalCommand::Left => self.on_left(),
@@ -160,6 +247,12 @@ impl Buffer {
             }
         }
         Ok(())
+    }
+    pub fn execute_command(&mut self, c: char,config: &Config) -> AnyHowResult<()> {
+                self.command_text =  self.command_text.clone().map(|mut t| {
+                    t.push_str(&c.to_string()); 
+                    t});
+                Ok(())
     }
 
     pub fn add_newline_above(&mut self) {
@@ -213,88 +306,13 @@ impl Buffer {
     }
 
     pub fn on_key(&mut self, c: char,config: &Config) {
-        match self.mode {
+        let _ = match self.mode {
             Mode::Normal => self.execute_normal(c, config),
-            _ => Ok(())
+            Mode::Command => self.execute_command(c, config),
+            Mode::Visual => self.execute_visual(c, config),
+            Mode::Insert => self.execute_insert(c, config),
+            Mode::Append => self.execute_append(c, config),
         };
-        /*
-        match c {
-            'y' if self.mode == Mode::Visual => {
-                self.mode = Mode::Normal;
-                if let Some((start_idx,end_idx)) = self.get_selected_range() {
-                    if let Some(selected_text) = self.text.slice(start_idx..end_idx).as_str() {
-                        self.clipboard.set_text(selected_text.to_owned()).expect("Could not set value to system clipboard");
-                    }
-                }
-                self.start_select_pos = None;
-                self.end_select_pos = None;
-            },
-            'p' if self.mode == Mode::Visual => {
-                self.mode = Mode::Normal;
-                if let Some((start_idx,end_idx)) = self.get_selected_range() {
-                    let coppied_text = self.clipboard.get_text().expect("Could not set value to system clipboard");
-                    self.past_states.push(self.text.clone());
-                    self.future_states = vec![];
-                    let _ = self.text.try_remove(start_idx..end_idx);
-                    let _ = self.text.try_insert(start_idx,&coppied_text);
-                }
-            },
-            'd' if self.mode == Mode::Visual => {
-                self.mode = Mode::Normal;
-                if let Some((start_idx,end_idx)) = self.get_selected_range() {
-                    self.future_states = vec![];
-                    self.past_states.push(self.text.clone());
-                    let _ = self.text.try_remove(start_idx..end_idx);
-                    self.recenter();
-                }
-                self.start_select_pos = None;
-                self.end_select_pos = None;
-            },
-            '\n' if self.mode == Mode::Insert => {
-                let char_idx = self.get_cursor_idx();
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                let _ = self.text.try_insert_char(char_idx,c);
-                self.x_pos = 0;
-                self.on_down();
-            },
-            '\n' if self.mode == Mode::Append => {
-                let char_idx = self.get_cursor_idx() + 1;
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                if self.text.try_insert_char(char_idx,c).is_ok() {
-                    self.y_pos += 1;
-                    self.x_pos = 0;
-                } else if self.text.try_insert_char(char_idx - 1,c).is_ok() {
-                    self.y_pos += 1;
-                    self.x_pos = 0;
-                }
-            },
-            _ if self.mode == Mode::Insert => {
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                let char_idx = self.get_cursor_idx();
-                if  self.text.try_insert_char(char_idx,c).is_ok() {
-                    self.x_pos += 1;
-                }
-            },
-            _ if self.mode == Mode::Command => {
-                self.command_text =  self.command_text.clone().map(|mut t| {
-                    t.push_str(&c.to_string()); 
-                    t});
-            },
-            _ if self.mode == Mode::Append => {
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                let char_idx = self.get_cursor_idx() + 1;
-                if  self.text.try_insert_char(char_idx,c).is_ok() {
-                    self.x_pos += 1;
-                } else if self.text.try_insert_char(char_idx - 1,c).is_ok() {
-                    self.x_pos += 1;
-                }
-            }
-            _ => {}
-        }*/
     }
 
     pub fn set_command_mode(&mut self) {
