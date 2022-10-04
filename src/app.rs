@@ -1,15 +1,11 @@
-use crate::util::event::{Config, Event, Events};
-use syntect::{parsing::{SyntaxReference,SyntaxSet},highlighting::ThemeSet};
-use std::ops::Deref;
+use crate::util::event::{Config, Event};
 use crate::{Buffer, Window};
-use arboard::Clipboard;
 use ropey::Rope;
-use std::str::FromStr;
-use strum;
-use strum_macros::{EnumMessage, EnumString};
-use termion::{event::Key, input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
-
-use serde::Deserialize;
+use syntect::{
+    highlighting::ThemeSet,
+    parsing::{SyntaxReference, SyntaxSet},
+};
+use termion::event::Key;
 
 #[derive(Deserialize, PartialEq, Eq, Debug)]
 pub enum Command {
@@ -38,7 +34,7 @@ pub struct App {
     // pub tabs: Option<Vec<Tab>>,
     pub syntax_set: SyntaxSet,
     pub theme_set: ThemeSet,
-    pub syntax: SyntaxReference ,
+    pub syntax: SyntaxReference,
     pub current_window: u8,
     pub windows: Vec<Window>,
     pub buffers: Vec<Buffer>,
@@ -93,12 +89,6 @@ impl App {
         }
     }
 
-    pub fn set_current_page(&mut self, page: u16) {
-        if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
-            buffer.current_page = page
-        }
-    }
-
     pub fn mode(&self) -> Mode {
         self.buffers
             .get(self.current_buffer)
@@ -123,29 +113,8 @@ impl App {
         }
     }
 
-    pub fn window(&self) -> Option<&Window> {
-        self.windows
-            .get(self.current_window as usize)
-    }
-
-    pub fn text(&self) -> Option<Rope> {
-        self.buffers
-            .get(self.current_buffer)
-            .map(|b| b.text.clone())
-    }
-
     pub fn buffer_at(&self, idx: usize) -> Option<Rope> {
         self.buffers.get(idx).map(|b| b.text.clone())
-    }
-
-    pub fn on_key(&mut self, c: char, config: &Config) {
-        if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
-            if c == '\n' && buffer.mode == Mode::Command {
-                self.parse_command(config);
-            } else {
-                buffer.on_key(c, config);
-            }
-        }
     }
 
     pub fn parse_command(&mut self, _config: &Config) {
@@ -196,12 +165,11 @@ impl App {
     }
 
     pub fn new(file_name: Option<String>) -> Result<App, std::io::Error> {
-
         match Buffer::new(file_name) {
             Ok(buffer) => {
-            let ps = SyntaxSet::load_defaults_newlines();
-            let ts = ThemeSet::load_defaults();
-            let syntax = ps.find_syntax_by_extension("rs").clone();
+                let ps = SyntaxSet::load_defaults_newlines();
+                let ts = ThemeSet::load_defaults();
+                let syntax = ps.find_syntax_by_extension("rs").clone();
                 Ok(Self {
                     //current_tab: 0,
                     //tabs: None,
@@ -216,12 +184,6 @@ impl App {
                 })
             }
             Err(e) => Err(e),
-        }
-    }
-
-    pub fn set_command_mode(&mut self) {
-        if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
-            buffer.mode = Mode::Command
         }
     }
 

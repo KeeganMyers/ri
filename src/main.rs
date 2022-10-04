@@ -1,43 +1,29 @@
 mod app;
-mod window;
 mod buffer;
+pub mod command;
 mod ui;
 mod util;
-pub mod command;
+mod window;
 
-pub use command::{Command,normal_command::NormalCommand};
-use std::sync::Arc;
+use crate::{app::App, buffer::Buffer, window::Window};
 use argh::FromArgs;
-use termion::{event::Key,input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
-use crate::{app::App,buffer::Buffer,window::Window};
-use util::event::{Config, Event, Events};
+pub use command::{normal_command::NormalCommand, Command};
+use std::sync::Arc;
 use std::{error::Error, io, time::Duration};
+use termion::{input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
 use tui::{backend::TermionBackend, Terminal};
-extern crate strum;
-#[macro_use]
-extern crate strum_macros;
+use util::event::{Config, Events};
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
 
-use syntect::easy::HighlightLines;
-use syntect::parsing::SyntaxSet;
-use syntect::highlighting::{ThemeSet, Style};
-use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
-
 #[derive(Debug, FromArgs)]
 #[argh(description = "")]
 struct Cli {
-    /// time in ms between two ticks.
-    #[argh(option, default = "250")]
-    tick_rate: u64,
-    /// whether unicode symbols are used to improve the overall look of the app
-    #[argh(option, default = "true")]
-    enhanced_graphics: bool,
     ///file name to open in the first tab
     #[argh(positional)]
-    file_name: Option<String>
+    file_name: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -66,7 +52,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             })?;
         }
 
-        Arc::get_mut(&mut app).unwrap().on_event(events.next()?,&config);
+        Arc::get_mut(&mut app)
+            .unwrap()
+            .on_event(events.next()?, &config);
         if app.should_quit {
             break;
         }

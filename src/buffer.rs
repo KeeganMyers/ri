@@ -1,9 +1,12 @@
-use crate::{Command,NormalCommand,util::event::{Config, Event, Events}};
-use anyhow::{Result as AnyHowResult, Error as AnyHowError};
 use crate::app::Mode;
+use crate::{
+    util::event::{Config, Event},
+    Command, NormalCommand,
+};
+use anyhow::Result as AnyHowResult;
 use arboard::Clipboard;
 use ropey::Rope;
-use termion::{event::Key,input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
+use termion::event::Key;
 
 pub struct Buffer {
     pub should_quit: bool,
@@ -29,20 +32,20 @@ pub struct Buffer {
 
 impl Buffer {
     pub fn on_save(&mut self) -> Result<(), std::io::Error> {
-       if let Some(file_path) = &self.file_path {
+        if let Some(file_path) = &self.file_path {
             let file = if std::path::Path::new(&file_path).exists() {
                 std::fs::OpenOptions::new()
-                            .read(true)
-                            .write(true)
-                            .truncate(true)
-                            .open(&file_path)?
+                    .read(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(&file_path)?
             } else {
                 std::fs::File::create(&file_path)?
             };
-           self.text.write_to(std::io::BufWriter::new(file))?;
-           return Ok(());
-       }
-       Ok(())
+            self.text.write_to(std::io::BufWriter::new(file))?;
+            return Ok(());
+        }
+        Ok(())
     }
 
     pub fn on_up(&mut self) {
@@ -55,7 +58,7 @@ impl Buffer {
     }
 
     pub fn on_down(&mut self) {
-        if self.y_pos < self.text.len_lines() as u16 - 1{
+        if self.y_pos < self.text.len_lines() as u16 - 1 {
             self.y_pos += 1;
         }
         if self.y_pos != 0 && (self.y_pos % self.page_size) == 0 {
@@ -68,11 +71,11 @@ impl Buffer {
     }
 
     pub fn end_of_current_line(&self) -> usize {
-         self.text.line_to_char(self.y_pos as usize) + self.current_line_len()
+        self.text.line_to_char(self.y_pos as usize) + self.current_line_len()
     }
-    
+
     pub fn start_of_current_line(&self) -> usize {
-         self.text.line_to_char(self.y_pos as usize)
+        self.text.line_to_char(self.y_pos as usize)
     }
 
     pub fn on_right(&mut self) {
@@ -94,7 +97,7 @@ impl Buffer {
     }
 
     pub fn recenter(&mut self) {
-        if self.y_pos < 0_u16 {
+        if self.y_pos <= 0_u16 {
             self.on_down()
         }
         if self.y_pos < self.text.len_lines() as u16 {
@@ -103,7 +106,7 @@ impl Buffer {
     }
 
     pub fn get_cursor_idx(&self) -> usize {
-         self.text.line_to_char(self.y_pos as usize) + self.x_pos as usize
+        self.text.line_to_char(self.y_pos as usize) + self.x_pos as usize
     }
 
     pub fn remove_char(&mut self) {
@@ -117,9 +120,9 @@ impl Buffer {
         }
     }
 
-    pub fn get_selected_range(&self) -> Option<(usize,usize)> {
-        let mut offset = 0;
-        let mut end_idx = 0;
+    pub fn get_selected_range(&self) -> Option<(usize, usize)> {
+        let offset;
+        let end_idx;
         if let Some(end) = self.end_select_pos {
             offset = 0;
             end_idx = end;
@@ -129,39 +132,44 @@ impl Buffer {
         }
         if let Some(start_idx) = self.start_select_pos {
             if start_idx > end_idx {
-                return Some((end_idx,start_idx+offset));
+                return Some((end_idx, start_idx + offset));
             } else {
-                return Some((start_idx,end_idx+offset));
+                return Some((start_idx, end_idx + offset));
             }
         }
         None
     }
 
-    pub fn execute_visual(&mut self, c: char,config: &Config) -> AnyHowResult<()> {
+    pub fn execute_visual(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
         match c {
             'y' => {
                 self.mode = Mode::Normal;
-                if let Some((start_idx,end_idx)) = self.get_selected_range() {
+                if let Some((start_idx, end_idx)) = self.get_selected_range() {
                     if let Some(selected_text) = self.text.slice(start_idx..end_idx).as_str() {
-                        self.clipboard.set_text(selected_text.to_owned()).expect("Could not set value to system clipboard");
+                        self.clipboard
+                            .set_text(selected_text.to_owned())
+                            .expect("Could not set value to system clipboard");
                     }
                 }
                 self.start_select_pos = None;
                 self.end_select_pos = None;
-            },
+            }
             'p' => {
                 self.mode = Mode::Normal;
-                if let Some((start_idx,end_idx)) = self.get_selected_range() {
-                    let coppied_text = self.clipboard.get_text().expect("Could not set value to system clipboard");
+                if let Some((start_idx, end_idx)) = self.get_selected_range() {
+                    let coppied_text = self
+                        .clipboard
+                        .get_text()
+                        .expect("Could not set value to system clipboard");
                     self.past_states.push(self.text.clone());
                     self.future_states = vec![];
                     let _ = self.text.try_remove(start_idx..end_idx);
-                    let _ = self.text.try_insert(start_idx,&coppied_text);
+                    let _ = self.text.try_insert(start_idx, &coppied_text);
                 }
-            },
+            }
             'd' => {
                 self.mode = Mode::Normal;
-                if let Some((start_idx,end_idx)) = self.get_selected_range() {
+                if let Some((start_idx, end_idx)) = self.get_selected_range() {
                     self.future_states = vec![];
                     self.past_states.push(self.text.clone());
                     let _ = self.text.try_remove(start_idx..end_idx);
@@ -169,33 +177,33 @@ impl Buffer {
                 }
                 self.start_select_pos = None;
                 self.end_select_pos = None;
-            },
-            _ => ()
+            }
+            _ => (),
         }
         Ok(())
     }
 
-    pub fn execute_append(&mut self, c: char,config: &Config) -> AnyHowResult<()> {
+    pub fn execute_append(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
         match c {
             '\n' if self.mode == Mode::Append => {
                 let char_idx = self.get_cursor_idx() + 1;
                 self.past_states.push(self.text.clone());
                 self.future_states = vec![];
-                if self.text.try_insert_char(char_idx,c).is_ok() {
+                if self.text.try_insert_char(char_idx, c).is_ok() {
                     self.y_pos += 1;
                     self.x_pos = 0;
-                } else if self.text.try_insert_char(char_idx - 1,c).is_ok() {
+                } else if self.text.try_insert_char(char_idx - 1, c).is_ok() {
                     self.y_pos += 1;
                     self.x_pos = 0;
                 }
-            },
+            }
             _ => {
                 self.past_states.push(self.text.clone());
                 self.future_states = vec![];
                 let char_idx = self.get_cursor_idx() + 1;
-                if  self.text.try_insert_char(char_idx,c).is_ok() {
+                if self.text.try_insert_char(char_idx, c).is_ok() {
                     self.x_pos += 1;
-                } else if self.text.try_insert_char(char_idx - 1,c).is_ok() {
+                } else if self.text.try_insert_char(char_idx - 1, c).is_ok() {
                     self.x_pos += 1;
                 }
             }
@@ -203,21 +211,21 @@ impl Buffer {
         Ok(())
     }
 
-    pub fn execute_insert(&mut self, c: char,config: &Config) -> AnyHowResult<()> {
+    pub fn execute_insert(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
         match c {
             '\n' => {
                 let char_idx = self.get_cursor_idx();
                 self.past_states.push(self.text.clone());
                 self.future_states = vec![];
-                let _ = self.text.try_insert_char(char_idx,c);
+                let _ = self.text.try_insert_char(char_idx, c);
                 self.x_pos = 0;
                 self.on_down();
-            },
+            }
             _ => {
                 self.past_states.push(self.text.clone());
                 self.future_states = vec![];
                 let char_idx = self.get_cursor_idx();
-                if  self.text.try_insert_char(char_idx,c).is_ok() {
+                if self.text.try_insert_char(char_idx, c).is_ok() {
                     self.x_pos += 1;
                 }
             }
@@ -225,8 +233,8 @@ impl Buffer {
         Ok(())
     }
 
-    pub fn execute_normal(&mut self, c: char,config: &Config) -> AnyHowResult<()> {
-        let tokens = NormalCommand::tokenize(c.to_string());     
+    pub fn execute_normal(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
+        let tokens = NormalCommand::tokenize(c.to_string());
         for command in NormalCommand::parse(tokens)? {
             match command {
                 NormalCommand::Left => self.on_left(),
@@ -234,7 +242,7 @@ impl Buffer {
                 NormalCommand::Up => self.on_up(),
                 NormalCommand::Down => self.on_down(),
                 NormalCommand::Insert => self.set_insert_mode(),
-                NormalCommand::Append => self.set_insert_mode(),
+                NormalCommand::Append => self.set_append_mode(),
                 NormalCommand::AddNewLineBelow => self.add_newline_below(),
                 NormalCommand::AddNewLineAbove => self.add_newline_above(),
                 NormalCommand::Paste => self.paste_text(),
@@ -243,16 +251,29 @@ impl Buffer {
                 NormalCommand::DeleteLine => self.delete_line(),
                 NormalCommand::Visual => self.set_visual_mode(),
                 NormalCommand::VisualLine => self.select_line(),
-                _ => ()
+                NormalCommand::Last => {
+                    self.x_pos = self.end_of_current_line() as u16;
+                }
+                NormalCommand::LastNonBlank => {
+                    self.x_pos = self.end_of_current_line() as u16;
+                }
+                NormalCommand::First => {
+                    self.x_pos = self.end_of_current_line() as u16;
+                }
+                NormalCommand::FirstNonBlank => {
+                    self.x_pos = self.end_of_current_line() as u16;
+                }
+                _ => (),
             }
         }
         Ok(())
     }
-    pub fn execute_command(&mut self, c: char,config: &Config) -> AnyHowResult<()> {
-                self.command_text =  self.command_text.clone().map(|mut t| {
-                    t.push_str(&c.to_string()); 
-                    t});
-                Ok(())
+    pub fn execute_command(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
+        self.command_text = self.command_text.clone().map(|mut t| {
+            t.push_str(&c.to_string());
+            t
+        });
+        Ok(())
     }
 
     pub fn add_newline_above(&mut self) {
@@ -273,7 +294,7 @@ impl Buffer {
         self.future_states = vec![];
         self.x_pos = 0;
         self.y_pos += 1;
-        let _ = self.text.try_insert_char(char_idx,'\n');
+        let _ = self.text.try_insert_char(char_idx, '\n');
     }
 
     pub fn undo(&mut self) {
@@ -291,21 +312,26 @@ impl Buffer {
     }
 
     pub fn paste_text(&mut self) {
-        let coppied_text = self.clipboard.get_text().expect("Could not set value to system clipboard");
+        let coppied_text = self
+            .clipboard
+            .get_text()
+            .expect("Could not set value to system clipboard");
         let char_idx = self.get_cursor_idx();
         self.past_states.push(self.text.clone());
         self.future_states = vec![];
-        let _ = self.text.try_insert(char_idx,&coppied_text);
+        let _ = self.text.try_insert(char_idx, &coppied_text);
     }
 
     pub fn delete_line(&mut self) {
         self.future_states = vec![];
         self.past_states.push(self.text.clone());
-        let _ = self.text.try_remove(self.start_of_current_line()..self.end_of_current_line());
+        let _ = self
+            .text
+            .try_remove(self.start_of_current_line()..self.end_of_current_line());
         self.recenter();
     }
 
-    pub fn on_key(&mut self, c: char,config: &Config) {
+    pub fn on_key(&mut self, c: char, config: &Config) {
         let _ = match self.mode {
             Mode::Normal => self.execute_normal(c, config),
             Mode::Command => self.execute_command(c, config),
@@ -337,7 +363,7 @@ impl Buffer {
         self.mode = Mode::Normal
     }
 
-    pub fn new(file_name: Option<String>) -> Result<Self,std::io::Error> {
+    pub fn new(file_name: Option<String>) -> Result<Self, std::io::Error> {
         match file_name {
             Some(file_path) => {
                 let rope = if std::path::Path::new(&file_path).exists() {
@@ -345,7 +371,7 @@ impl Buffer {
                     let buf_reader = std::io::BufReader::new(file);
                     Rope::from_reader(buf_reader)?
                 } else {
-                  Rope::new()
+                    Rope::new()
                 };
 
                 Ok(Self {
@@ -369,40 +395,40 @@ impl Buffer {
                     current_page: 0,
                     page_size: 10,
                 })
-            },
-            None => {
-                Ok(Self {
-                    title: "Ri".to_string(),
-                    should_quit: false,
-                    clipboard: Clipboard::new().unwrap(),
-                    mode: Mode::Normal,
-                    start_select_pos: None,
-                    end_select_pos: None,
-                    char_pos: 0,
-                    past_states: vec![],
-                    future_states: vec![],
-                    x_pos: 0,
-                    y_pos: 0,
-                    x_offset: 0,
-                    y_offset: 0,
-                    file_path: None,
-                    text: Rope::new(),
-                    command_text: None,
-                    last_char: None,
-                    current_page: 0,
-                    page_size: 10,
-                })
             }
+            None => Ok(Self {
+                title: "Ri".to_string(),
+                should_quit: false,
+                clipboard: Clipboard::new().unwrap(),
+                mode: Mode::Normal,
+                start_select_pos: None,
+                end_select_pos: None,
+                char_pos: 0,
+                past_states: vec![],
+                future_states: vec![],
+                x_pos: 0,
+                y_pos: 0,
+                x_offset: 0,
+                y_offset: 0,
+                file_path: None,
+                text: Rope::new(),
+                command_text: None,
+                last_char: None,
+                current_page: 0,
+                page_size: 10,
+            }),
         }
     }
 
-    pub fn on_event(&mut self,event: Event<Key>,config: &Config) {
+    pub fn on_event(&mut self, event: Event<Key>, config: &Config) {
         match event {
             Event::Input(key) => match key {
                 Key::Up => {
                     self.on_up();
                 }
-                Key::Backspace if self.mode == self::Mode::Insert || self.mode == self::Mode::Append  => {
+                Key::Backspace
+                    if self.mode == self::Mode::Insert || self.mode == self::Mode::Append =>
+                {
                     self.remove_char();
                 }
                 Key::Backspace if self.mode == self::Mode::Normal => {
@@ -418,7 +444,10 @@ impl Buffer {
                     self.on_right();
                 }
                 Key::Esc => {
-                    if self.mode == self::Mode::Insert || self.mode == self::Mode::Append || self.mode == self::Mode::Visual {
+                    if self.mode == self::Mode::Insert
+                        || self.mode == self::Mode::Append
+                        || self.mode == self::Mode::Visual
+                    {
                         self.start_select_pos = None;
                         self.set_normal_mode();
                     }
@@ -430,7 +459,7 @@ impl Buffer {
                     self.command_text = Some("".to_string());
                     self.set_command_mode();
                     self.on_key(c, &config);
-                },
+                }
                 Key::Char(c) => {
                     self.on_key(c, &config);
                     if self.mode == self::Mode::Normal {
@@ -440,11 +469,9 @@ impl Buffer {
                     }
                 }
                 _ => {}
-            _ => ()
+                _ => (),
             },
-            Event::Tick => {
-                ()
-            }
+            Event::Tick => (),
         }
-  }
+    }
 }

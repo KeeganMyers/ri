@@ -1,6 +1,6 @@
-use anyhow::{Result as AnyHowResult, Error as AnyHowError};
-use std::{iter::Iterator,convert::TryFrom};
 use super::Command;
+use anyhow::{Error as AnyHowError, Result as AnyHowResult};
+use std::{convert::TryFrom, iter::Iterator};
 
 #[derive(Debug, PartialEq)]
 pub enum NormalCommand {
@@ -25,7 +25,7 @@ pub enum NormalCommand {
     FindNext(String),
     FindLast(String),
     TillNext(String),
-    TillLast(String)
+    TillLast(String),
 }
 
 pub const PARSE_FAILURE_ERR: &'static str = "Unknown Command";
@@ -52,15 +52,15 @@ impl TryFrom<&String> for NormalCommand {
             "g_" => Ok(Self::LastNonBlank),
             "v" => Ok(Self::Visual),
             "V" => Ok(Self::VisualLine),
-            _ => Err(Self::Error::msg(PARSE_FAILURE_ERR))
+            _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),
         };
         if cmd.is_err() {
             return match value.chars().collect::<Vec<char>>().as_slice() {
-                ['f', rest]  => Ok(Self::FindNext(rest.to_string())),
-                ['F', rest]  => Ok(Self::FindLast(rest.to_string())),
-                ['t', rest]  => Ok(Self::TillNext(rest.to_string())),
-                ['T', rest]  => Ok(Self::TillLast(rest.to_string())),
-                _ => Err(Self::Error::msg(PARSE_FAILURE_ERR))
+                ['f', rest] => Ok(Self::FindNext(rest.to_string())),
+                ['F', rest] => Ok(Self::FindLast(rest.to_string())),
+                ['t', rest] => Ok(Self::TillNext(rest.to_string())),
+                ['T', rest] => Ok(Self::TillLast(rest.to_string())),
+                _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),
             };
         }
         cmd
@@ -69,7 +69,9 @@ impl TryFrom<&String> for NormalCommand {
 
 impl Command for NormalCommand {
     fn tokenize(command: String) -> Vec<String> {
-        command.split("").map(|s| s.to_string())
+        command
+            .split("")
+            .map(|s| s.to_string())
             .filter(|s| s.len() >= 1)
             .collect()
     }
@@ -83,10 +85,10 @@ impl Command for NormalCommand {
                 commands.push(command);
                 p_token = tokens.pop();
             } else if let Some(added_token_char) = tokens.pop() {
-                p_token = p_token.map(|s| format!("{}{}",s,added_token_char));
+                p_token = p_token.map(|s| format!("{}{}", s, added_token_char));
             } else {
                 //return Err(AnyHowError::msg(PARSE_FAILURE_ERR));
-                return Err(AnyHowError::msg(format!("{:?}",p_token_char)));
+                return Err(AnyHowError::msg(format!("{:?}", p_token_char)));
             }
         }
         Ok(commands)
