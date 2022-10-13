@@ -3,7 +3,7 @@ use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use std::{convert::TryFrom, iter::Iterator};
 
 #[derive(Debug, PartialEq)]
-pub enum NormalCommand {
+pub enum RangeCommand {
     First,
     FirstNonBlank,
     Left,
@@ -12,16 +12,6 @@ pub enum NormalCommand {
     Right,
     Up,
     Down,
-    Insert,
-    Append,
-    AddNewLineBelow,
-    AddNewLineAbove,
-    Paste,
-    Undo,
-    Redo,
-    DeleteLine,
-    Visual,
-    VisualLine,
     FindNext(String),
     FindLast(String),
     TillNext(String),
@@ -35,20 +25,11 @@ pub enum NormalCommand {
 }
 
 pub const PARSE_FAILURE_ERR: &'static str = "Unknown Command";
-impl TryFrom<&String> for NormalCommand {
+impl TryFrom<&String> for RangeCommand {
     type Error = AnyHowError;
 
     fn try_from(value: &String) -> Result<Self, Self::Error> {
         let cmd = match value.as_str() {
-            "a" => Ok(Self::Append),
-            "dd" => Ok(Self::DeleteLine),
-            "u" => Ok(Self::Undo),
-            "r" => Ok(Self::Redo),
-            "o" => Ok(Self::AddNewLineBelow),
-            "O" => Ok(Self::AddNewLineAbove),
-            "p" => Ok(Self::Paste),
-            "i" => Ok(Self::Insert),
-            "0" => Ok(Self::First),
             "^" => Ok(Self::FirstNonBlank),
             "$" => Ok(Self::Last),
             "h" => Ok(Self::Left),
@@ -62,8 +43,6 @@ impl TryFrom<&String> for NormalCommand {
             "e" => Ok(Self::EndWord),
             "b" => Ok(Self::BackWord),
             "iw" => Ok(Self::InnerWord),
-            "v" => Ok(Self::Visual),
-            "V" => Ok(Self::VisualLine),
             _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),
         };
         if cmd.is_err() {
@@ -79,7 +58,7 @@ impl TryFrom<&String> for NormalCommand {
     }
 }
 
-impl Command for NormalCommand {
+impl Command for RangeCommand {
     fn parse(mut tokens: Vec<String>) -> AnyHowResult<Vec<Self>> {
         let mut p_token = tokens.pop();
         let mut commands = Vec::new();

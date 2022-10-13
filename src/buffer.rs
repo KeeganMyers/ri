@@ -1,7 +1,7 @@
 use crate::app::Mode;
 use crate::{
     util::event::{Config, Event},
-    Command, NormalCommand,
+    Command, NormalCommand, OperatorCommand, RangeCommand,
 };
 use anyhow::Result as AnyHowResult;
 use arboard::Clipboard;
@@ -14,7 +14,7 @@ pub struct Buffer {
     pub future_states: Vec<Rope>,
     pub file_path: Option<String>,
     pub command_text: Option<String>,
-    pub last_char: Option<char>,
+    pub operator: Option<OperatorCommand>,
     pub y_offset: u16,
     pub x_offset: u16,
     pub x_pos: u16,
@@ -76,6 +76,10 @@ impl Buffer {
 
     pub fn start_of_current_line(&self) -> usize {
         self.text.line_to_char(self.y_pos as usize)
+    }
+
+    pub fn current_line_chars(&self) -> Vec<char> {
+        self.text.line(self.y_pos as usize).chars().collect()
     }
 
     pub fn on_right(&mut self) {
@@ -233,41 +237,90 @@ impl Buffer {
         Ok(())
     }
 
+    pub fn find_next_word(&self) -> u16 {
+        let line_chars = self.current_line_chars();
+        let mut chars_cursor = line_chars[self.x_pos as usize..].iter();
+        let mut end_current_word = self.x_pos.clone();
+
+        while let Some(c) = chars_cursor.next() {
+            if !c.is_alphabetic() {
+                end_current_word += 1;
+                break;
+            }
+            end_current_word += 1;
+        }
+
+        if end_current_word != self.x_pos {
+            let mut chars_end_word = line_chars[end_current_word as usize..].iter();
+            let mut start_next_word = end_current_word.clone();
+            while let Some(c) = chars_end_word.next() {
+                if c.is_alphabetic() {
+                    start_next_word += 1;
+                    break;
+                    start_next_word += 1;
+                }
+            }
+            start_next_word
+        } else {
+            end_current_word
+        }
+    }
+
+    pub fn find_range(&self, range: &RangeCommand) -> Option<(u16, u16)> {
+        match range {
+            RangeCommand::StartWord => Some((self.x_pos, self.find_next_word())),
+            _ => None,
+        }
+    }
+
     pub fn execute_normal(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
-        let tokens = NormalCommand::tokenize(c.to_string());
-        for command in NormalCommand::parse(tokens)? {
-            match command {
-                NormalCommand::Left => self.on_left(),
-                NormalCommand::Right => self.on_right(),
-                NormalCommand::Up => self.on_up(),
-                NormalCommand::Down => self.on_down(),
-                NormalCommand::Insert => self.set_insert_mode(),
-                NormalCommand::Append => self.set_append_mode(),
-                NormalCommand::AddNewLineBelow => self.add_newline_below(),
-                NormalCommand::AddNewLineAbove => self.add_newline_above(),
-                NormalCommand::Paste => self.paste_text(),
-                NormalCommand::Undo => self.undo(),
-                NormalCommand::Redo => self.redo(),
-                NormalCommand::DeleteLine => self.delete_line(),
-                NormalCommand::Visual => self.set_visual_mode(),
-                NormalCommand::VisualLine => self.select_line(),
-                NormalCommand::Last => {
-                    self.x_pos = self.end_of_current_line() as u16;
+        if let Some(operator) = &self.operator {
+            if let Ok(ranges) = RangeCommand::parse(RangeCommand::tokenize(c.to_string())) {
+                //TODO: identify range and operate on
+            }
+            self.operator = None;
+        } else if let Ok(commands) = NormalCommand::parse(NormalCommand::tokenize(c.to_string())) {
+            for command in commands {
+                match command {
+                    NormalCommand::Left => self.on_left(),
+                    NormalCommand::Right => self.on_right(),
+                    NormalCommand::Up => self.on_up(),
+                    NormalCommand::Down => self.on_down(),
+                    NormalCommand::Insert => self.set_insert_mode(),
+                    NormalCommand::Append => self.set_append_mode(),
+                    NormalCommand::AddNewLineBelow => self.add_newline_below(),
+                    NormalCommand::AddNewLineAbove => self.add_newline_above(),
+                    NormalCommand::Paste => self.paste_text(),
+                    NormalCommand::Undo => self.undo(),
+                    NormalCommand::Redo => self.redo(),
+                    NormalCommand::DeleteLine => self.delete_line(),
+                    NormalCommand::Visual => self.set_visual_mode(),
+                    NormalCommand::VisualLine => self.select_line(),
+                    NormalCommand::Last => {
+                        self.x_pos = self.end_of_current_line() as u16;
+                    }
+                    NormalCommand::LastNonBlank => {
+                        self.x_pos = self.end_of_current_line() as u16;
+                    }
+                    NormalCommand::First => {
+                        self.x_pos = self.end_of_current_line() as u16;
+                    }
+                    NormalCommand::FirstNonBlank => {
+                        self.x_pos = self.end_of_current_line() as u16;
+                    }
+                    _ => (),
                 }
-                NormalCommand::LastNonBlank => {
-                    self.x_pos = self.end_of_current_line() as u16;
-                }
-                NormalCommand::First => {
-                    self.x_pos = self.end_of_current_line() as u16;
-                }
-                NormalCommand::FirstNonBlank => {
-                    self.x_pos = self.end_of_current_line() as u16;
-                }
-                _ => (),
+            }
+        } else if let Ok(operators) =
+            OperatorCommand::parse(OperatorCommand::tokenize(c.to_string()))
+        {
+            if let Some(operator) = operators.get(0) {
+                self.operator = Some(*operator);
             }
         }
         Ok(())
     }
+
     pub fn execute_command(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
         self.command_text = self.command_text.clone().map(|mut t| {
             t.push_str(&c.to_string());
@@ -391,7 +444,7 @@ impl Buffer {
                     file_path: Some(file_path),
                     text: rope,
                     command_text: None,
-                    last_char: None,
+                    operator: None,
                     current_page: 0,
                     page_size: 10,
                 })
@@ -413,7 +466,7 @@ impl Buffer {
                 file_path: None,
                 text: Rope::new(),
                 command_text: None,
-                last_char: None,
+                operator: None,
                 current_page: 0,
                 page_size: 10,
             }),
@@ -462,11 +515,6 @@ impl Buffer {
                 }
                 Key::Char(c) => {
                     self.on_key(c, &config);
-                    if self.mode == self::Mode::Normal {
-                        self.last_char = Some(c);
-                    } else {
-                        self.last_char = None;
-                    }
                 }
                 _ => {}
                 _ => (),

@@ -7,7 +7,10 @@ mod window;
 
 use crate::{app::App, buffer::Buffer, window::Window};
 use argh::FromArgs;
-pub use command::{normal_command::NormalCommand, Command};
+pub use command::{
+    normal_command::NormalCommand, operator_command::OperatorCommand, range_command::RangeCommand,
+    Command,
+};
 use std::sync::Arc;
 use std::{error::Error, io, time::Duration};
 use termion::{input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};

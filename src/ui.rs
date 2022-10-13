@@ -66,17 +66,6 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     for (split, window) in text_splits.iter().zip(app.windows.iter()) {
         draw_text(f, app, split, window)
     }
-    /*
-    if let Some(window) = app.window() {
-        if app.y_pos() != 0 && (app.y_pos() % window.page_size) == 0 {
-            if app.y_pos() < (window.page_size * window.current_page) {
-             app.set_current_page(window.current_page - window.page_size);
-            } else {
-             app.set_current_page(window.current_page + window.page_size);
-            }
-        }
-    }
-    */
 
     draw_footer(f, app, area[2]);
 }
@@ -110,7 +99,6 @@ where
         } else {
             app.display_x_pos()
         };
-
         let paragraph = if let Some(current_page) = app.current_page() {
             Paragraph::new(spans)
                 .alignment(Alignment::Left)
