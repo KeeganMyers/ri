@@ -1,4 +1,5 @@
 use crate::app::Mode;
+use log::{debug, error, info, trace, warn, LevelFilter, SetLoggerError};
 use crate::{
     util::event::{Config, Event},
     Command, NormalCommand, OperatorCommand, RangeCommand,
@@ -67,19 +68,25 @@ impl Buffer {
     }
 
     pub fn current_line_len(&self) -> usize {
-        self.text.line(self.y_pos as usize).len_chars()
+        let len = self.text.line(self.y_pos as usize).len_chars();
+        trace!("line_length {:?}",len);
+        len
     }
 
     pub fn end_of_current_line(&self) -> usize {
-        self.text.line_to_char(self.y_pos as usize) + self.current_line_len()
+       let len = self.start_of_current_line() + self.current_line_len();
+       trace!("end of current line {:?}",len);
+       len
     }
 
     pub fn start_of_current_line(&self) -> usize {
-        self.text.line_to_char(self.y_pos as usize)
+        let len = self.text.line_to_char(self.y_pos as usize);
+        trace!("start of current line {:?}", len);
+        len
     }
 
     pub fn current_line_chars(&self) -> Vec<char> {
-        self.text.line(self.y_pos as usize).chars().collect()
+        self.text.line(self.y_pos as usize).chars().filter(|c| c != &'\n').collect()
     }
 
     pub fn on_right(&mut self) {
@@ -239,6 +246,7 @@ impl Buffer {
 
     pub fn find_next_word(&self) -> u16 {
         let line_chars = self.current_line_chars();
+        trace!("line chars {:?}", line_chars);
         let mut chars_cursor = line_chars[self.x_pos as usize..].iter();
         let mut end_current_word = self.x_pos.clone();
 
@@ -257,6 +265,7 @@ impl Buffer {
                 if c.is_alphabetic() {
                     start_next_word += 1;
                     break;
+                } else {
                     start_next_word += 1;
                 }
             }
@@ -275,11 +284,17 @@ impl Buffer {
 
     pub fn execute_normal(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
         if let Some(operator) = &self.operator {
-            if let Ok(ranges) = RangeCommand::parse(RangeCommand::tokenize(c.to_string())) {
-                //TODO: identify range and operate on
+            if let Some(range_command) = RangeCommand::parse(RangeCommand::tokenize(c.to_string())).unwrap_or_default().get(0) {
+                 if let Some((start_range,end_range)) = self.find_range(range_command) {
+                     match operator {
+                        OperatorCommand::Yank => self.yank_range(start_range.into(),end_range.into()),
+                        _ => ()
+                     }
+                 }
             }
             self.operator = None;
         } else if let Ok(commands) = NormalCommand::parse(NormalCommand::tokenize(c.to_string())) {
+            trace!("got commands {:?}",commands);
             for command in commands {
                 match command {
                     NormalCommand::Left => self.on_left(),
@@ -297,16 +312,19 @@ impl Buffer {
                     NormalCommand::Visual => self.set_visual_mode(),
                     NormalCommand::VisualLine => self.select_line(),
                     NormalCommand::Last => {
-                        self.x_pos = self.end_of_current_line() as u16;
+                        self.x_pos = (self.current_line_len() -2) as u16;
                     }
                     NormalCommand::LastNonBlank => {
-                        self.x_pos = self.end_of_current_line() as u16;
+                        self.x_pos = (self.current_line_len() -2) as u16;
                     }
                     NormalCommand::First => {
-                        self.x_pos = self.end_of_current_line() as u16;
+                        self.x_pos = 0 as u16;
                     }
                     NormalCommand::FirstNonBlank => {
-                        self.x_pos = self.end_of_current_line() as u16;
+                        self.x_pos = 0 as u16;
+                    }
+                    NormalCommand::StartWord => {
+                        self.x_pos = self.find_next_word();
                     }
                     _ => (),
                 }
@@ -361,6 +379,14 @@ impl Buffer {
     pub fn redo(&mut self) {
         if let Some(future_state) = self.future_states.pop() {
             self.text = future_state;
+        }
+    }
+
+    pub fn yank_range(&mut self,range_start: usize,range_end: usize) {
+        if let Some(slice) = self.text.get_slice((range_start..range_end)) {
+                    self.clipboard
+                        .set_text(slice.as_str().unwrap_or_default().to_owned())
+                        .expect("Could not set value to system clipboard");
         }
     }
 
