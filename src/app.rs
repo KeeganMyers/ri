@@ -29,20 +29,17 @@ pub enum Mode {
     Command,
 }
 
-pub struct App {
+pub struct App<'s> {
     // pub current_tab: u8,
     // pub tabs: Option<Vec<Tab>>,
-    pub syntax_set: SyntaxSet,
-    pub theme_set: ThemeSet,
-    pub syntax: SyntaxReference,
     pub current_window: u8,
-    pub windows: Vec<Window>,
+    pub windows: Vec<Window<'s>>,
     pub buffers: Vec<Buffer>,
     pub current_buffer: usize,
     pub should_quit: bool,
 }
 
-impl App {
+impl <'s> App<'s> {
     pub fn on_save(&mut self) -> Result<(), std::io::Error> {
         if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
             return buffer.on_save();
@@ -67,6 +64,13 @@ impl App {
         self.buffers
             .get(self.current_buffer)
             .map(|b| b.y_pos)
+            .unwrap_or_default()
+    }
+
+    pub fn title(&self) -> String {
+        self.buffers
+            .get(self.current_buffer)
+            .map(|b| b.title.clone())
             .unwrap_or_default()
     }
 
@@ -117,6 +121,11 @@ impl App {
         self.buffers.get(idx).map(|b| b.text.clone())
     }
 
+
+    pub fn window_at(&self, idx: usize) -> Option<&Window> {
+        self.windows.get(idx).map(|b| b.clone())
+    }
+
     pub fn parse_command(&mut self, _config: &Config) {
         if let Some(command_text) = &self.command_text() {
             let command_str = command_text.replace(":", "");
@@ -144,11 +153,12 @@ impl App {
                         } else {
                             Buffer::new(None).unwrap()
                         };
+                        let buffer_text = buffer.text.clone();
                         self.buffers.push(buffer);
                         self.windows
-                            .push(Window::new((self.buffers.len() - 1) as u16));
+                            .push(Window::new((self.buffers.len() - 1) as u16,Some(buffer_text)));
                     } else {
-                        self.windows.push(Window::new(0));
+                        self.windows.push(Window::new(0,None));
                     }
                     self.set_normal_mode();
                 }
@@ -164,22 +174,20 @@ impl App {
         }
     }
 
-    pub fn new(file_name: Option<String>) -> Result<App, std::io::Error> {
+    pub fn new(file_name: Option<String>) -> Result<App<'s>, std::io::Error> {
         match Buffer::new(file_name) {
             Ok(buffer) => {
                 let ps = SyntaxSet::load_defaults_newlines();
                 let ts = ThemeSet::load_defaults();
                 let syntax = ps.find_syntax_by_extension("rs").clone();
+                let buffer_text = buffer.text.clone();
                 Ok(Self {
                     //current_tab: 0,
                     //tabs: None,
-                    syntax_set: ps.clone(),
-                    theme_set: ts,
-                    syntax: syntax.clone().unwrap().to_owned(),
                     current_window: 0,
                     current_buffer: 0,
                     buffers: vec![buffer],
-                    windows: vec![Window::new(0)],
+                    windows: vec![Window::new(0,Some(buffer_text))],
                     should_quit: false,
                 })
             }

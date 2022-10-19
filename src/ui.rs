@@ -10,6 +10,13 @@ use tui::{
     Frame,
 };
 
+pub fn control_style() -> Style {
+    Style::default()
+        .fg(Color::Black)
+        .bg(Color::Gray)
+        .add_modifier(Modifier::BOLD)
+}
+
 pub fn convert_style(style: SyntectStyle) -> Style {
     Style::default()
         .fg(Color::Rgb(
@@ -17,11 +24,13 @@ pub fn convert_style(style: SyntectStyle) -> Style {
             style.foreground.g,
             style.foreground.b,
         ))
+        /*
         .bg(Color::Rgb(
             style.background.r,
             style.background.g,
             style.background.b,
         ))
+        */
 }
 
 pub fn to_span(style: SyntectStyle, value: &str) -> Span {
@@ -37,22 +46,14 @@ pub fn to_spans(highlights: Vec<(SyntectStyle, &str)>) -> Spans {
     )
 }
 
-pub fn line_number_spans(line_number_count: &usize) -> Spans {
-    Spans::from(
-    (1..*line_number_count).map(|l|  Span::styled(format!("{:<5}",l), Style::default()
 
-        .fg(Color::Yellow)))
-            .collect::<Vec<Span>>(),
-    )
-}
-
-pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
+pub fn draw<B: Backend>(f: &mut Frame<B>, app: & mut App) {
     let area = Layout::default()
         .constraints(
             [
-                Constraint::Percentage(10),
-                Constraint::Percentage(80),
-                Constraint::Percentage(10),
+                Constraint::Length(1),
+                Constraint::Percentage(95),
+                Constraint::Length(1),
             ]
             .as_ref(),
         )
@@ -68,7 +69,7 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
                 .as_ref(),
         )
         .split(text_area);
-    app.set_y_offset(text_area.top() + 1);
+    app.set_y_offset(text_area.top());
     app.set_x_offset(4);
     draw_header(f, app, area[0]);
     for (split, window) in text_splits.iter().zip(app.windows.iter()) {
@@ -82,10 +83,6 @@ fn draw_text<B>(f: &mut Frame<B>, app: &App, area: &Rect, window: &Window)
 where
     B: Backend,
 {
-    let mut highlight = HighlightLines::new(&app.syntax, &app.theme_set.themes["base16-ocean.dark"]);
-    let block = Block::default().borders(Borders::ALL);
-    let mut spans: Vec<Spans> = vec![];
-
     let inner_text_splits = Layout::default()
         .direction(Direction::Horizontal)
         .constraints(
@@ -98,60 +95,51 @@ where
         .split(*area);
     let line_number_area = inner_text_splits[0];
     let text_area = inner_text_splits[1];
-    if let Some(text) = app.buffer_at(window.buffer_idx as usize) {
-        for line in text.lines() {
-            if let Some(l) = line.as_str() {
-                if let Ok(highlights) = highlight.highlight_line(l, &app.syntax_set) {
-                    spans.push(to_spans(highlights));
-                }
-            }
-        }
-        let y_cursor = if app.display_y_pos() >= area.bottom() {
-            area.bottom() - 3
-        } else {
-            app.display_y_pos()
-        };
+    let y_cursor = if app.display_y_pos() >= area.bottom() {
+        area.bottom() - 3
+    } else {
+        app.display_y_pos()
+    };
 
-        let x_cursor = if app.display_x_pos() >= area.right() {
-            area.right() - 1
-        } else {
-            app.display_x_pos()
-        };
-        //text
-        let paragraph = if let Some(current_page) = app.current_page() {
-            Paragraph::new(spans)
-                .alignment(Alignment::Left)
-                .wrap(Wrap { trim: false })
-                .scroll((current_page, app.x_pos()))
-        } else {
-            Paragraph::new(spans)
-                .alignment(Alignment::Left)
-                .wrap(Wrap { trim: false })
-        };
-        //line numbers
-        let line_count = text.len_lines();
-        let line_numbers = line_number_spans(&line_count);
-        let line_number_p = if let Some(current_page) = app.current_page() {
-            Paragraph::new(line_numbers)
-                .alignment(Alignment::Left)
-                .wrap(Wrap { trim: false })
-                .scroll((current_page, app.x_pos()))
-        } else {
-            Paragraph::new(line_numbers)
-                .alignment(Alignment::Left)
-                .wrap(Wrap { trim: false })
-        };
-        f.render_widget(line_number_p, line_number_area);
-        f.render_widget(paragraph, text_area);
-        f.set_cursor(x_cursor, y_cursor);
-    }
+    let x_cursor = if app.display_x_pos() >= area.right() {
+        area.right() - 1
+    } else {
+        app.display_x_pos()
+    };
+        if let Some(formatted_text) = app.window_at(window.buffer_idx as usize).and_then(|w| w.formatted_text) {
+            let paragraph = if let Some(current_page) = app.current_page() {
+                Paragraph::new(formatted_text)
+                    .alignment(Alignment::Left)
+                    .wrap(Wrap { trim: false })
+                    .scroll((current_page, app.x_pos()))
+            } else {
+                Paragraph::new(formatted_text)
+                    .alignment(Alignment::Left)
+                    .wrap(Wrap { trim: false })
+            };
+            f.render_widget(paragraph, text_area);
+            f.set_cursor(x_cursor, y_cursor);
+        }
+        if let Some(line_numbers) = app.window_at(window.buffer_idx as usize).and_then(|w| w.line_numbers) {
+            let line_number_p = if let Some(current_page) = app.current_page() {
+                Paragraph::new(line_numbers)
+                    .alignment(Alignment::Left)
+                    .wrap(Wrap { trim: false })
+                    .scroll((current_page, app.x_pos()))
+            } else {
+                Paragraph::new(line_numbers)
+                    .alignment(Alignment::Left)
+                    .wrap(Wrap { trim: false })
+            };
+            f.render_widget(line_number_p, line_number_area);
+        }
 }
 
-fn draw_footer<B>(f: &mut Frame<B>, app: &mut App, area: Rect)
+fn draw_footer<B>(f: &mut Frame<B>, app: & mut App, area: Rect)
 where
-    B: Backend,
+B: Backend,
 {
-    let block = Block::default().borders(Borders::ALL);
+    let block = Block::default().style(control_style());
     let paragraph = Paragraph::new(app.command_text().unwrap_or("".to_string()))
         .block(block.clone())
         .alignment(Alignment::Left)
@@ -169,17 +157,14 @@ where
     f.render_widget(paragraph3, area);
 }
 
-fn draw_header<B>(f: &mut Frame<B>, app: &mut App, area: Rect)
+fn draw_header<B>(f: &mut Frame<B>, app: & mut App, area: Rect)
 where
     B: Backend,
 {
-    let block = Block::default().borders(Borders::ALL).title(Span::styled(
-        "Header",
-        Style::default()
-            .fg(Color::Magenta)
-            .add_modifier(Modifier::BOLD),
-    ));
-    let text = format!("{},{}", app.y_pos(), app.x_pos());
+    let block = Block::default().style(
+        control_style()
+    );
+    let text = format!("{}", app.title());
     let paragraph = Paragraph::new(text).block(block).wrap(Wrap { trim: true });
     f.render_widget(paragraph, area);
 }
