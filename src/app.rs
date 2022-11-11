@@ -6,6 +6,7 @@ use syntect::{
     parsing::{SyntaxReference, SyntaxSet},
 };
 use termion::event::Key;
+use uuid::Uuid;
 
 #[derive(Deserialize, PartialEq, Eq, Debug)]
 pub enum Command {
@@ -107,6 +108,13 @@ impl App {
             .get(self.current_buffer)
             .and_then(|b| b.command_text.clone())
     }
+
+    pub fn title(&self) -> Option<String> {
+        self.buffers
+            .get(self.current_buffer)
+            .map(|b| b.title.clone())
+    }
+
     pub fn set_command_text(&mut self, text: &str) {
         if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
             buffer.command_text = Some(text.to_owned())
@@ -115,6 +123,10 @@ impl App {
 
     pub fn buffer_at(&self, idx: usize) -> Option<Rope> {
         self.buffers.get(idx).map(|b| b.text.clone())
+    }
+
+    pub fn buffer_id_at(&self, idx: usize) -> Option<Uuid> {
+        self.buffers.get(idx).map(|b| b.id)
     }
 
     pub fn parse_command(&mut self, _config: &Config) {
@@ -126,7 +138,6 @@ impl App {
                 .map(|c| serde_plain::from_str::<Command>(c))
             {
                 Some(Ok(Command::Quit)) => {
-                    self.set_command_text("tried to quit");
                     self.should_quit = true;
                 }
                 Some(Ok(Command::Write)) => {
@@ -134,7 +145,6 @@ impl App {
                     self.set_normal_mode();
                 }
                 Some(Ok(Command::TabNew)) => {
-                    self.set_command_text("tried to tabnew");
                     self.set_normal_mode();
                 }
                 Some(Ok(Command::VerticalSplit)) => {

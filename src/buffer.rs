@@ -1,15 +1,22 @@
 use crate::app::Mode;
-use log::{debug, error, info, trace, warn, LevelFilter, SetLoggerError};
+use crate::ui::to_spans;
 use crate::{
     util::event::{Config, Event},
     Command, NormalCommand, OperatorCommand, RangeCommand,
 };
 use anyhow::Result as AnyHowResult;
 use arboard::Clipboard;
+use log::{debug, error, info, trace, warn, LevelFilter, SetLoggerError};
 use ropey::Rope;
+use std::borrow::Cow;
+use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
+use syntect::{easy::HighlightLines, highlighting::ThemeSet, parsing::SyntaxSet};
 use termion::event::Key;
+use tui::text::{Span, Spans};
+use uuid::Uuid;
 
 pub struct Buffer {
+    pub id: Uuid,
     pub should_quit: bool,
     pub past_states: Vec<Rope>,
     pub future_states: Vec<Rope>,
@@ -22,13 +29,35 @@ pub struct Buffer {
     pub y_pos: u16,
     pub start_select_pos: Option<usize>,
     pub end_select_pos: Option<usize>,
-    pub char_pos: usize,
     pub mode: Mode,
     pub clipboard: Clipboard,
     pub text: Rope,
     pub title: String,
     pub page_size: u16,
     pub current_page: u16,
+}
+
+pub struct HashBuffer<'a> {
+    pub id: Uuid,
+    pub should_quit: bool,
+    pub past_states: Vec<Rope>,
+    pub future_states: Vec<Rope>,
+    pub file_path: Option<String>,
+    pub command_text: Option<String>,
+    pub operator: Option<OperatorCommand>,
+    pub y_offset: u16,
+    pub x_offset: u16,
+    pub x_pos: u16,
+    pub y_pos: u16,
+    pub start_select_pos: Option<usize>,
+    pub end_select_pos: Option<usize>,
+    pub mode: Mode,
+    pub clipboard: Clipboard,
+    pub text: Rope,
+    pub title: String,
+    pub page_size: u16,
+    pub current_page: u16,
+    pub highlights: Vec<Spans<'a>>,
 }
 
 impl Buffer {
@@ -69,14 +98,14 @@ impl Buffer {
 
     pub fn current_line_len(&self) -> usize {
         let len = self.text.line(self.y_pos as usize).len_chars();
-        trace!("line_length {:?}",len);
+        trace!("line_length {:?}", len);
         len
     }
 
     pub fn end_of_current_line(&self) -> usize {
-       let len = self.start_of_current_line() + self.current_line_len();
-       trace!("end of current line {:?}",len);
-       len
+        let len = self.start_of_current_line() + self.current_line_len();
+        trace!("end of current line {:?}", len);
+        len
     }
 
     pub fn start_of_current_line(&self) -> usize {
@@ -86,7 +115,11 @@ impl Buffer {
     }
 
     pub fn current_line_chars(&self) -> Vec<char> {
-        self.text.line(self.y_pos as usize).chars().filter(|c| c != &'\n').collect()
+        self.text
+            .line(self.y_pos as usize)
+            .chars()
+            .filter(|c| c != &'\n')
+            .collect()
     }
 
     pub fn on_right(&mut self) {
@@ -284,17 +317,22 @@ impl Buffer {
 
     pub fn execute_normal(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
         if let Some(operator) = &self.operator {
-            if let Some(range_command) = RangeCommand::parse(RangeCommand::tokenize(c.to_string())).unwrap_or_default().get(0) {
-                 if let Some((start_range,end_range)) = self.find_range(range_command) {
-                     match operator {
-                        OperatorCommand::Yank => self.yank_range(start_range.into(),end_range.into()),
-                        _ => ()
-                     }
-                 }
+            if let Some(range_command) = RangeCommand::parse(RangeCommand::tokenize(c.to_string()))
+                .unwrap_or_default()
+                .get(0)
+            {
+                if let Some((start_range, end_range)) = self.find_range(range_command) {
+                    match operator {
+                        OperatorCommand::Yank => {
+                            self.yank_range(start_range.into(), end_range.into())
+                        }
+                        _ => (),
+                    }
+                }
             }
             self.operator = None;
         } else if let Ok(commands) = NormalCommand::parse(NormalCommand::tokenize(c.to_string())) {
-            trace!("got commands {:?}",commands);
+            trace!("got commands {:?}", commands);
             for command in commands {
                 match command {
                     NormalCommand::Left => self.on_left(),
@@ -312,10 +350,10 @@ impl Buffer {
                     NormalCommand::Visual => self.set_visual_mode(),
                     NormalCommand::VisualLine => self.select_line(),
                     NormalCommand::Last => {
-                        self.x_pos = (self.current_line_len() -2) as u16;
+                        self.x_pos = (self.current_line_len() - 2) as u16;
                     }
                     NormalCommand::LastNonBlank => {
-                        self.x_pos = (self.current_line_len() -2) as u16;
+                        self.x_pos = (self.current_line_len() - 2) as u16;
                     }
                     NormalCommand::First => {
                         self.x_pos = 0 as u16;
@@ -382,11 +420,11 @@ impl Buffer {
         }
     }
 
-    pub fn yank_range(&mut self,range_start: usize,range_end: usize) {
+    pub fn yank_range(&mut self, range_start: usize, range_end: usize) {
         if let Some(slice) = self.text.get_slice((range_start..range_end)) {
-                    self.clipboard
-                        .set_text(slice.as_str().unwrap_or_default().to_owned())
-                        .expect("Could not set value to system clipboard");
+            self.clipboard
+                .set_text(slice.as_str().unwrap_or_default().to_owned())
+                .expect("Could not set value to system clipboard");
         }
     }
 
@@ -454,13 +492,13 @@ impl Buffer {
                 };
 
                 Ok(Self {
+                    id: Uuid::new_v4(),
                     title: file_path.clone(),
                     should_quit: false,
                     clipboard: Clipboard::new().unwrap(),
                     mode: Mode::Normal,
                     start_select_pos: None,
                     end_select_pos: None,
-                    char_pos: 0,
                     past_states: vec![],
                     future_states: vec![],
                     x_pos: 0,
@@ -476,13 +514,13 @@ impl Buffer {
                 })
             }
             None => Ok(Self {
+                id: Uuid::new_v4(),
                 title: "Ri".to_string(),
                 should_quit: false,
                 clipboard: Clipboard::new().unwrap(),
                 mode: Mode::Normal,
                 start_select_pos: None,
                 end_select_pos: None,
-                char_pos: 0,
                 past_states: vec![],
                 future_states: vec![],
                 x_pos: 0,
@@ -546,6 +584,89 @@ impl Buffer {
                 _ => (),
             },
             Event::Tick => (),
+        }
+    }
+}
+
+impl HashBuffer<'_> {
+    pub fn new<'a>(file_name: Option<String>) -> Result<Self, std::io::Error> {
+        match file_name {
+            Some(file_path) => {
+                let rope = if std::path::Path::new(&file_path).exists() {
+                    let file = std::fs::File::open(&file_path)?;
+                    let buf_reader = std::io::BufReader::new(file);
+                    Rope::from_reader(buf_reader)?
+                } else {
+                    Rope::new()
+                };
+
+                let rope = if std::path::Path::new(&file_path).exists() {
+                    let file = std::fs::File::open(&file_path)?;
+                    let buf_reader = std::io::BufReader::new(file);
+                    Rope::from_reader(buf_reader)?
+                } else {
+                    Rope::new()
+                };
+
+                let ps = SyntaxSet::load_defaults_newlines();
+                let ts = ThemeSet::load_defaults();
+                let syntax = ps.find_syntax_by_extension("rs").clone().unwrap();
+                let mut highlight = HighlightLines::new(&syntax, &ts.themes["base16-ocean.dark"]);
+                let mut spans: Vec<Spans> = vec![];
+                let rope_str = rope.to_string();
+                let text_lines = LinesWithEndings::from(Box::leak(Box::new(rope_str)));
+                // lines().to_owned().map(|l| l.as_str()).filter(|l| l.is_some()).map(|l| l.unwrap()).collect::<Vec<&str>>();
+                for line in text_lines {
+                    if let Ok(hs) = highlight.highlight_line(line, &ps) {
+                        spans.push(to_spans(hs.clone()));
+                    }
+                }
+
+                Ok(Self {
+                    id: Uuid::new_v4(),
+                    title: file_path.clone(),
+                    should_quit: false,
+                    clipboard: Clipboard::new().unwrap(),
+                    mode: Mode::Normal,
+                    start_select_pos: None,
+                    end_select_pos: None,
+                    past_states: vec![],
+                    future_states: vec![],
+                    x_pos: 0,
+                    y_pos: 0,
+                    x_offset: 0,
+                    y_offset: 0,
+                    file_path: Some(file_path),
+                    text: rope.clone(),
+                    command_text: None,
+                    operator: None,
+                    current_page: 0,
+                    page_size: 10,
+                    highlights: spans.clone(),
+                })
+            }
+            None => Ok(Self {
+                id: Uuid::new_v4(),
+                title: "Ri".to_string(),
+                should_quit: false,
+                clipboard: Clipboard::new().unwrap(),
+                mode: Mode::Normal,
+                start_select_pos: None,
+                end_select_pos: None,
+                past_states: vec![],
+                future_states: vec![],
+                x_pos: 0,
+                y_pos: 0,
+                x_offset: 0,
+                y_offset: 0,
+                file_path: None,
+                text: Rope::new(),
+                command_text: None,
+                operator: None,
+                current_page: 0,
+                page_size: 10,
+                highlights: vec![],
+            }),
         }
     }
 }
