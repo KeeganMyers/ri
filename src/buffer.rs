@@ -1,8 +1,8 @@
 use crate::app::Mode;
 use crate::ui::to_spans;
 use crate::{
+    token::{NormalToken, OperatorToken, RangeToken, Token},
     util::event::{Config, Event},
-    Command, NormalCommand, OperatorCommand, RangeCommand,
 };
 use anyhow::Result as AnyHowResult;
 use arboard::Clipboard;
@@ -22,7 +22,7 @@ pub struct Buffer {
     pub future_states: Vec<Rope>,
     pub file_path: Option<String>,
     pub command_text: Option<String>,
-    pub operator: Option<OperatorCommand>,
+    pub operator: Option<OperatorToken>,
     pub y_offset: u16,
     pub x_offset: u16,
     pub x_pos: u16,
@@ -44,7 +44,7 @@ pub struct HashBuffer<'a> {
     pub future_states: Vec<Rope>,
     pub file_path: Option<String>,
     pub command_text: Option<String>,
-    pub operator: Option<OperatorCommand>,
+    pub operator: Option<OperatorToken>,
     pub y_offset: u16,
     pub x_offset: u16,
     pub x_pos: u16,
@@ -308,22 +308,23 @@ impl Buffer {
         }
     }
 
-    pub fn find_range(&self, range: &RangeCommand) -> Option<(u16, u16)> {
+    pub fn find_range(&self, range: &RangeToken) -> Option<(u16, u16)> {
         match range {
-            RangeCommand::StartWord => Some((self.x_pos, self.find_next_word())),
+            RangeToken::StartWord => Some((self.x_pos, self.find_next_word())),
             _ => None,
         }
     }
 
     pub fn execute_normal(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
+        /*
         if let Some(operator) = &self.operator {
-            if let Some(range_command) = RangeCommand::parse(RangeCommand::tokenize(c.to_string()))
+            if let Some(range_command) = RangeToken::parse(RangeToken::tokenize(c.to_string()))
                 .unwrap_or_default()
                 .get(0)
             {
                 if let Some((start_range, end_range)) = self.find_range(range_command) {
                     match operator {
-                        OperatorCommand::Yank => {
+                        OperatorToken::Yank => {
                             self.yank_range(start_range.into(), end_range.into())
                         }
                         _ => (),
@@ -331,49 +332,50 @@ impl Buffer {
                 }
             }
             self.operator = None;
-        } else if let Ok(commands) = NormalCommand::parse(NormalCommand::tokenize(c.to_string())) {
+        } else if let Ok(commands) = NormalToken::parse(NormalToken::tokenize(c.to_string())) {
             trace!("got commands {:?}", commands);
             for command in commands {
                 match command {
-                    NormalCommand::Left => self.on_left(),
-                    NormalCommand::Right => self.on_right(),
-                    NormalCommand::Up => self.on_up(),
-                    NormalCommand::Down => self.on_down(),
-                    NormalCommand::Insert => self.set_insert_mode(),
-                    NormalCommand::Append => self.set_append_mode(),
-                    NormalCommand::AddNewLineBelow => self.add_newline_below(),
-                    NormalCommand::AddNewLineAbove => self.add_newline_above(),
-                    NormalCommand::Paste => self.paste_text(),
-                    NormalCommand::Undo => self.undo(),
-                    NormalCommand::Redo => self.redo(),
-                    NormalCommand::DeleteLine => self.delete_line(),
-                    NormalCommand::Visual => self.set_visual_mode(),
-                    NormalCommand::VisualLine => self.select_line(),
-                    NormalCommand::Last => {
+                    NormalToken::Left => self.on_left(),
+                    NormalToken::Right => self.on_right(),
+                    NormalToken::Up => self.on_up(),
+                    NormalToken::Down => self.on_down(),
+                    NormalToken::Insert => self.set_insert_mode(),
+                    NormalToken::Append => self.set_append_mode(),
+                    NormalToken::AddNewLineBelow => self.add_newline_below(),
+                    NormalToken::AddNewLineAbove => self.add_newline_above(),
+                    NormalToken::Paste => self.paste_text(),
+                    NormalToken::Undo => self.undo(),
+                    NormalToken::Redo => self.redo(),
+                    NormalToken::DeleteLine => self.delete_line(),
+                    NormalToken::Visual => self.set_visual_mode(),
+                    NormalToken::VisualLine => self.select_line(),
+                    NormalToken::Last => {
                         self.x_pos = (self.current_line_len() - 2) as u16;
                     }
-                    NormalCommand::LastNonBlank => {
+                    NormalToken::LastNonBlank => {
                         self.x_pos = (self.current_line_len() - 2) as u16;
                     }
-                    NormalCommand::First => {
+                    NormalToken::First => {
                         self.x_pos = 0 as u16;
                     }
-                    NormalCommand::FirstNonBlank => {
+                    NormalToken::FirstNonBlank => {
                         self.x_pos = 0 as u16;
                     }
-                    NormalCommand::StartWord => {
+                    NormalToken::StartWord => {
                         self.x_pos = self.find_next_word();
                     }
                     _ => (),
                 }
             }
         } else if let Ok(operators) =
-            OperatorCommand::parse(OperatorCommand::tokenize(c.to_string()))
+            OperatorToken::parse(OperatorToken::tokenize(c.to_string()))
         {
             if let Some(operator) = operators.get(0) {
                 self.operator = Some(*operator);
             }
         }
+        */
         Ok(())
     }
 
@@ -508,7 +510,7 @@ impl Buffer {
                     file_path: Some(file_path),
                     text: rope,
                     command_text: None,
-                    operator: None,
+                    operator: None::<OperatorToken>,
                     current_page: 0,
                     page_size: 10,
                 })
@@ -639,7 +641,7 @@ impl HashBuffer<'_> {
                     file_path: Some(file_path),
                     text: rope.clone(),
                     command_text: None,
-                    operator: None,
+                    operator: None::<OperatorToken>,
                     current_page: 0,
                     page_size: 10,
                     highlights: spans.clone(),

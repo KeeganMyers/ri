@@ -1,21 +1,17 @@
 mod app;
 mod buffer;
-pub mod command;
+pub mod token;
 mod ui;
 mod util;
 mod window;
 
 use crate::{
-    app::App,
+    app::{App, Mode},
     buffer::{Buffer, HashBuffer},
     window::Window,
 };
 use anyhow::Result as AnyhowResult;
 use argh::FromArgs;
-pub use command::{
-    normal_command::NormalCommand, operator_command::OperatorCommand, range_command::RangeCommand,
-    Command,
-};
 use log::{debug, error, info, trace, warn, LevelFilter, SetLoggerError};
 use log4rs::{
     append::{
@@ -30,10 +26,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::{error::Error, io, time::Duration};
 use syntect::highlighting::Style as SyntectStyle;
+use termion::event::Key;
 use termion::{input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
 use tui::text::{Span, Spans};
 use tui::{backend::TermionBackend, Terminal};
-use util::event::{Config, Events};
+use util::event::{Config, Event, Events};
 use uuid::Uuid;
 #[macro_use]
 extern crate serde_derive;
@@ -104,6 +101,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let events = Events::with_config(config.clone());
     let mut app = Arc::new(App::new(cli.file_name)?);
     loop {
+        let event = events.next()?;
         if !app.should_quit {
             terminal.draw(|f| {
                 ui::draw(
@@ -115,9 +113,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             })?;
         }
 
-        Arc::get_mut(&mut app)
-            .unwrap()
-            .on_event(events.next()?, &config);
+        Arc::get_mut(&mut app).unwrap().on_event(event, &config);
         if app.should_quit {
             break;
         }
