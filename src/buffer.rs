@@ -1,18 +1,13 @@
 use crate::app::Mode;
-use crate::ui::to_spans;
 use crate::{
     token::{NormalToken, OperatorToken, RangeToken, Token},
     util::event::{Config, Event},
 };
 use anyhow::Result as AnyHowResult;
 use arboard::Clipboard;
-use log::{debug, error, info, trace, warn, LevelFilter, SetLoggerError};
+use log::trace;
 use ropey::Rope;
-use std::borrow::Cow;
-use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
-use syntect::{easy::HighlightLines, highlighting::ThemeSet, parsing::SyntaxSet};
 use termion::event::Key;
-use tui::text::{Span, Spans};
 use uuid::Uuid;
 
 pub struct Buffer {
@@ -35,29 +30,6 @@ pub struct Buffer {
     pub title: String,
     pub page_size: u16,
     pub current_page: u16,
-}
-
-pub struct HashBuffer<'a> {
-    pub id: Uuid,
-    pub should_quit: bool,
-    pub past_states: Vec<Rope>,
-    pub future_states: Vec<Rope>,
-    pub file_path: Option<String>,
-    pub command_text: Option<String>,
-    pub operator: Option<OperatorToken>,
-    pub y_offset: u16,
-    pub x_offset: u16,
-    pub x_pos: u16,
-    pub y_pos: u16,
-    pub start_select_pos: Option<usize>,
-    pub end_select_pos: Option<usize>,
-    pub mode: Mode,
-    pub clipboard: Clipboard,
-    pub text: Rope,
-    pub title: String,
-    pub page_size: u16,
-    pub current_page: u16,
-    pub highlights: Vec<Spans<'a>>,
 }
 
 impl Buffer {
@@ -423,7 +395,7 @@ impl Buffer {
     }
 
     pub fn yank_range(&mut self, range_start: usize, range_end: usize) {
-        if let Some(slice) = self.text.get_slice((range_start..range_end)) {
+        if let Some(slice) = self.text.get_slice(range_start..range_end) {
             self.clipboard
                 .set_text(slice.as_str().unwrap_or_default().to_owned())
                 .expect("Could not set value to system clipboard");
@@ -586,89 +558,6 @@ impl Buffer {
                 _ => (),
             },
             Event::Tick => (),
-        }
-    }
-}
-
-impl HashBuffer<'_> {
-    pub fn new<'a>(file_name: Option<String>) -> Result<Self, std::io::Error> {
-        match file_name {
-            Some(file_path) => {
-                let rope = if std::path::Path::new(&file_path).exists() {
-                    let file = std::fs::File::open(&file_path)?;
-                    let buf_reader = std::io::BufReader::new(file);
-                    Rope::from_reader(buf_reader)?
-                } else {
-                    Rope::new()
-                };
-
-                let rope = if std::path::Path::new(&file_path).exists() {
-                    let file = std::fs::File::open(&file_path)?;
-                    let buf_reader = std::io::BufReader::new(file);
-                    Rope::from_reader(buf_reader)?
-                } else {
-                    Rope::new()
-                };
-
-                let ps = SyntaxSet::load_defaults_newlines();
-                let ts = ThemeSet::load_defaults();
-                let syntax = ps.find_syntax_by_extension("rs").clone().unwrap();
-                let mut highlight = HighlightLines::new(&syntax, &ts.themes["base16-ocean.dark"]);
-                let mut spans: Vec<Spans> = vec![];
-                let rope_str = rope.to_string();
-                let text_lines = LinesWithEndings::from(Box::leak(Box::new(rope_str)));
-                // lines().to_owned().map(|l| l.as_str()).filter(|l| l.is_some()).map(|l| l.unwrap()).collect::<Vec<&str>>();
-                for line in text_lines {
-                    if let Ok(hs) = highlight.highlight_line(line, &ps) {
-                        spans.push(to_spans(hs.clone()));
-                    }
-                }
-
-                Ok(Self {
-                    id: Uuid::new_v4(),
-                    title: file_path.clone(),
-                    should_quit: false,
-                    clipboard: Clipboard::new().unwrap(),
-                    mode: Mode::Normal,
-                    start_select_pos: None,
-                    end_select_pos: None,
-                    past_states: vec![],
-                    future_states: vec![],
-                    x_pos: 0,
-                    y_pos: 0,
-                    x_offset: 0,
-                    y_offset: 0,
-                    file_path: Some(file_path),
-                    text: rope.clone(),
-                    command_text: None,
-                    operator: None::<OperatorToken>,
-                    current_page: 0,
-                    page_size: 10,
-                    highlights: spans.clone(),
-                })
-            }
-            None => Ok(Self {
-                id: Uuid::new_v4(),
-                title: "Ri".to_string(),
-                should_quit: false,
-                clipboard: Clipboard::new().unwrap(),
-                mode: Mode::Normal,
-                start_select_pos: None,
-                end_select_pos: None,
-                past_states: vec![],
-                future_states: vec![],
-                x_pos: 0,
-                y_pos: 0,
-                x_offset: 0,
-                y_offset: 0,
-                file_path: None,
-                text: Rope::new(),
-                command_text: None,
-                operator: None,
-                current_page: 0,
-                page_size: 10,
-                highlights: vec![],
-            }),
         }
     }
 }

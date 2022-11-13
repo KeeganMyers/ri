@@ -2,13 +2,13 @@ use crate::{App, Window};
 use std::collections::HashMap;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::Style as SyntectStyle;
-use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
+use syntect::util::LinesWithEndings;
 use tui::{
     backend::Backend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
+    style::{Color, Style},
     text::{Span, Spans},
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Paragraph, Wrap},
     Frame,
 };
 use uuid::Uuid;
@@ -93,7 +93,6 @@ fn draw_text<B>(
 {
     let mut highlight =
         HighlightLines::new(&app.syntax, &app.theme_set.themes["base16-ocean.dark"]);
-    let block = Block::default().borders(Borders::ALL);
     let mut spans: Vec<Spans> = vec![];
 
     let inner_text_splits = Layout::default()
