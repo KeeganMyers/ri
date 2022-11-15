@@ -1,11 +1,14 @@
 use crate::app::Mode;
 use crate::{
-    token::{NormalToken, OperatorToken, RangeToken, Token},
+    token::{
+        AppendToken, CommandToken, InsertToken, NormalToken, OperatorToken, RangeToken, Token,
+    },
     util::event::{Config, Event},
 };
-use anyhow::Result as AnyHowResult;
+use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use arboard::Clipboard;
 use log::trace;
+use postage::{broadcast, prelude::Stream};
 use ropey::Rope;
 use termion::event::Key;
 use uuid::Uuid;
@@ -156,99 +159,6 @@ impl Buffer {
         None
     }
 
-    pub fn execute_visual(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
-        match c {
-            'y' => {
-                self.mode = Mode::Normal;
-                if let Some((start_idx, end_idx)) = self.get_selected_range() {
-                    if let Some(selected_text) = self.text.slice(start_idx..end_idx).as_str() {
-                        self.clipboard
-                            .set_text(selected_text.to_owned())
-                            .expect("Could not set value to system clipboard");
-                    }
-                }
-                self.start_select_pos = None;
-                self.end_select_pos = None;
-            }
-            'p' => {
-                self.mode = Mode::Normal;
-                if let Some((start_idx, end_idx)) = self.get_selected_range() {
-                    let coppied_text = self
-                        .clipboard
-                        .get_text()
-                        .expect("Could not set value to system clipboard");
-                    self.past_states.push(self.text.clone());
-                    self.future_states = vec![];
-                    let _ = self.text.try_remove(start_idx..end_idx);
-                    let _ = self.text.try_insert(start_idx, &coppied_text);
-                }
-            }
-            'd' => {
-                self.mode = Mode::Normal;
-                if let Some((start_idx, end_idx)) = self.get_selected_range() {
-                    self.future_states = vec![];
-                    self.past_states.push(self.text.clone());
-                    let _ = self.text.try_remove(start_idx..end_idx);
-                    self.recenter();
-                }
-                self.start_select_pos = None;
-                self.end_select_pos = None;
-            }
-            _ => (),
-        }
-        Ok(())
-    }
-
-    pub fn execute_append(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
-        match c {
-            '\n' if self.mode == Mode::Append => {
-                let char_idx = self.get_cursor_idx() + 1;
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                if self.text.try_insert_char(char_idx, c).is_ok() {
-                    self.y_pos += 1;
-                    self.x_pos = 0;
-                } else if self.text.try_insert_char(char_idx - 1, c).is_ok() {
-                    self.y_pos += 1;
-                    self.x_pos = 0;
-                }
-            }
-            _ => {
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                let char_idx = self.get_cursor_idx() + 1;
-                if self.text.try_insert_char(char_idx, c).is_ok() {
-                    self.x_pos += 1;
-                } else if self.text.try_insert_char(char_idx - 1, c).is_ok() {
-                    self.x_pos += 1;
-                }
-            }
-        }
-        Ok(())
-    }
-
-    pub fn execute_insert(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
-        match c {
-            '\n' => {
-                let char_idx = self.get_cursor_idx();
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                let _ = self.text.try_insert_char(char_idx, c);
-                self.x_pos = 0;
-                self.on_down();
-            }
-            _ => {
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                let char_idx = self.get_cursor_idx();
-                if self.text.try_insert_char(char_idx, c).is_ok() {
-                    self.x_pos += 1;
-                }
-            }
-        }
-        Ok(())
-    }
-
     pub fn find_next_word(&self) -> u16 {
         let line_chars = self.current_line_chars();
         trace!("line chars {:?}", line_chars);
@@ -285,78 +195,6 @@ impl Buffer {
             RangeToken::StartWord => Some((self.x_pos, self.find_next_word())),
             _ => None,
         }
-    }
-
-    pub fn execute_normal(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
-        /*
-        if let Some(operator) = &self.operator {
-            if let Some(range_command) = RangeToken::parse(RangeToken::tokenize(c.to_string()))
-                .unwrap_or_default()
-                .get(0)
-            {
-                if let Some((start_range, end_range)) = self.find_range(range_command) {
-                    match operator {
-                        OperatorToken::Yank => {
-                            self.yank_range(start_range.into(), end_range.into())
-                        }
-                        _ => (),
-                    }
-                }
-            }
-            self.operator = None;
-        } else if let Ok(commands) = NormalToken::parse(NormalToken::tokenize(c.to_string())) {
-            trace!("got commands {:?}", commands);
-            for command in commands {
-                match command {
-                    NormalToken::Left => self.on_left(),
-                    NormalToken::Right => self.on_right(),
-                    NormalToken::Up => self.on_up(),
-                    NormalToken::Down => self.on_down(),
-                    NormalToken::Insert => self.set_insert_mode(),
-                    NormalToken::Append => self.set_append_mode(),
-                    NormalToken::AddNewLineBelow => self.add_newline_below(),
-                    NormalToken::AddNewLineAbove => self.add_newline_above(),
-                    NormalToken::Paste => self.paste_text(),
-                    NormalToken::Undo => self.undo(),
-                    NormalToken::Redo => self.redo(),
-                    NormalToken::DeleteLine => self.delete_line(),
-                    NormalToken::Visual => self.set_visual_mode(),
-                    NormalToken::VisualLine => self.select_line(),
-                    NormalToken::Last => {
-                        self.x_pos = (self.current_line_len() - 2) as u16;
-                    }
-                    NormalToken::LastNonBlank => {
-                        self.x_pos = (self.current_line_len() - 2) as u16;
-                    }
-                    NormalToken::First => {
-                        self.x_pos = 0 as u16;
-                    }
-                    NormalToken::FirstNonBlank => {
-                        self.x_pos = 0 as u16;
-                    }
-                    NormalToken::StartWord => {
-                        self.x_pos = self.find_next_word();
-                    }
-                    _ => (),
-                }
-            }
-        } else if let Ok(operators) =
-            OperatorToken::parse(OperatorToken::tokenize(c.to_string()))
-        {
-            if let Some(operator) = operators.get(0) {
-                self.operator = Some(*operator);
-            }
-        }
-        */
-        Ok(())
-    }
-
-    pub fn execute_command(&mut self, c: char, _config: &Config) -> AnyHowResult<()> {
-        self.command_text = self.command_text.clone().map(|mut t| {
-            t.push_str(&c.to_string());
-            t
-        });
-        Ok(())
     }
 
     pub fn add_newline_above(&mut self) {
@@ -420,16 +258,6 @@ impl Buffer {
             .text
             .try_remove(self.start_of_current_line()..self.end_of_current_line());
         self.recenter();
-    }
-
-    pub fn on_key(&mut self, c: char, config: &Config) {
-        let _ = match self.mode {
-            Mode::Normal => self.execute_normal(c, config),
-            Mode::Command => self.execute_command(c, config),
-            Mode::Visual => self.execute_visual(c, config),
-            Mode::Insert => self.execute_insert(c, config),
-            Mode::Append => self.execute_append(c, config),
-        };
     }
 
     pub fn set_command_mode(&mut self) {
@@ -511,53 +339,258 @@ impl Buffer {
         }
     }
 
-    pub fn on_event(&mut self, event: Event<Key>, config: &Config) {
-        match event {
-            Event::Input(key) => match key {
-                Key::Up => {
-                    self.on_up();
+    pub fn handle_append_token(&mut self, token: AppendToken) -> AnyHowResult<Vec<Token>> {
+        match token {
+            AppendToken::Enter => {
+                let char_idx = self.get_cursor_idx() + 1;
+                self.past_states.push(self.text.clone());
+                self.future_states = vec![];
+                if self.text.try_insert_char(char_idx, '\n').is_ok() {
+                    self.y_pos += 1;
+                    self.x_pos = 0;
+                } else if self.text.try_insert_char(char_idx - 1, '\n').is_ok() {
+                    self.y_pos += 1;
+                    self.x_pos = 0;
                 }
-                Key::Backspace
-                    if self.mode == self::Mode::Insert || self.mode == self::Mode::Append =>
-                {
-                    self.remove_char();
+                Ok(())
+            }
+            AppendToken::Append(chars) => {
+                self.past_states.push(self.text.clone());
+                self.future_states = vec![];
+                let char_idx = self.get_cursor_idx() + 1;
+                if self.text.try_insert(char_idx, &chars).is_ok() {
+                    self.x_pos += chars.len() as u16;
+                } else if self.text.try_insert(char_idx - 1, &chars).is_ok() {
+                    self.x_pos += chars.len() as u16;
                 }
-                Key::Backspace if self.mode == self::Mode::Normal => {
-                    self.on_left();
+                Ok(())
+            }
+            AppendToken::Remove => {
+                self.remove_char();
+                Ok(())
+            }
+            AppendToken::Esc => {
+                self.start_select_pos = None;
+                self.set_normal_mode();
+                Ok(())
+            }
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+        };
+        Ok(vec![])
+    }
+
+    pub fn handle_command_token(&mut self, token: CommandToken) -> AnyHowResult<Vec<Token>> {
+        match token {
+            CommandToken::Quit => {
+                self.should_quit = true;
+                Ok(())
+            }
+            CommandToken::Write => {
+                self.on_save();
+                Ok(())
+            }
+            CommandToken::Esc => {
+                self.set_normal_mode();
+                Ok(())
+            }
+            CommandToken::Append(chars) => {
+                self.command_text = self.command_text.clone().map(|mut t| {
+                    t.push_str(&chars);
+                    t
+                });
+                Ok(())
+            }
+            CommandToken::Remove => {
+                self.command_text = self.command_text.clone().map(|mut t| {
+                    t.truncate(t.len() - 1);
+                    t
+                });
+                Ok(())
+            }
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+        };
+        Ok(vec![])
+    }
+
+    pub fn handle_insert_token(&mut self, token: InsertToken) -> AnyHowResult<Vec<Token>> {
+        match token {
+            InsertToken::Enter => {
+                let char_idx = self.get_cursor_idx();
+                self.past_states.push(self.text.clone());
+                self.future_states = vec![];
+                let _ = self.text.try_insert_char(char_idx, '\n');
+                self.x_pos = 0;
+                self.on_down();
+                Ok(())
+            }
+            InsertToken::Append(chars) => {
+                self.past_states.push(self.text.clone());
+                self.future_states = vec![];
+                let char_idx = self.get_cursor_idx();
+                if self.text.try_insert(char_idx, &chars).is_ok() {
+                    self.x_pos += chars.len() as u16;
                 }
-                Key::Down => {
-                    self.on_down();
-                }
-                Key::Left => {
-                    self.on_left();
-                }
-                Key::Right => {
-                    self.on_right();
-                }
-                Key::Esc => {
-                    if self.mode == self::Mode::Insert
-                        || self.mode == self::Mode::Append
-                        || self.mode == self::Mode::Visual
-                    {
-                        self.start_select_pos = None;
-                        self.set_normal_mode();
-                    }
-                    if self.mode == self::Mode::Command {
-                        self.set_normal_mode();
-                    }
-                }
-                Key::Char(c) if c == ':' => {
-                    self.command_text = Some("".to_string());
-                    self.set_command_mode();
-                    self.on_key(c, &config);
-                }
-                Key::Char(c) => {
-                    self.on_key(c, &config);
-                }
-                _ => {}
-                _ => (),
-            },
-            Event::Tick => (),
+                Ok(())
+            }
+            InsertToken::Remove => {
+                self.remove_char();
+                Ok(())
+            }
+            InsertToken::Esc => {
+                self.start_select_pos = None;
+                self.set_normal_mode();
+                Ok(())
+            }
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+        };
+        Ok(vec![])
+    }
+
+    pub fn handle_normal_token(&mut self, token: NormalToken) -> AnyHowResult<Vec<Token>> {
+        match token {
+            NormalToken::Up => Ok(self.on_up()),
+            NormalToken::Down => Ok(self.on_down()),
+            NormalToken::Left => Ok(self.on_left()),
+            NormalToken::Right => Ok(self.on_right()),
+            NormalToken::SwitchToCommand => {
+                self.command_text = Some("".to_string());
+                self.set_command_mode();
+                Ok(())
+            }
+            NormalToken::SwitchToInsert => Ok(self.set_insert_mode()),
+            NormalToken::SwitchToAppend => Ok(self.set_append_mode()),
+            NormalToken::AddNewLineBelow => Ok(self.add_newline_below()),
+            NormalToken::AddNewLineAbove => Ok(self.add_newline_above()),
+            NormalToken::Paste => Ok(self.paste_text()),
+            NormalToken::Undo => Ok(self.undo()),
+            NormalToken::Redo => Ok(self.redo()),
+            NormalToken::DeleteLine => Ok(self.delete_line()),
+            NormalToken::Visual => Ok(self.set_visual_mode()),
+            NormalToken::VisualLine => Ok(self.select_line()),
+            NormalToken::Last => {
+                self.x_pos = (self.current_line_len() - 2) as u16;
+                Ok(())
+            }
+            NormalToken::LastNonBlank => {
+                self.x_pos = (self.current_line_len() - 2) as u16;
+                Ok(())
+            }
+            NormalToken::First => {
+                self.x_pos = 0 as u16;
+                Ok(())
+            }
+            NormalToken::FirstNonBlank => {
+                self.x_pos = 0 as u16;
+                Ok(())
+            }
+            NormalToken::StartWord => {
+                self.x_pos = self.find_next_word();
+                Ok(())
+            }
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+        };
+        Ok(vec![])
+    }
+
+    pub fn handle_visual_token(&mut self, token: Token) -> AnyHowResult<Vec<Token>> {
+        /*
+               match c {
+                   'y' => {
+                       self.mode = Mode::Normal;
+                       if let Some((start_idx, end_idx)) = self.get_selected_range() {
+                           if let Some(selected_text) = self.text.slice(start_idx..end_idx).as_str() {
+                               self.clipboard
+                                   .set_text(selected_text.to_owned())
+                                   .expect("Could not set value to system clipboard");
+                           }
+                       }
+                       self.start_select_pos = None;
+                       self.end_select_pos = None;
+                   }
+                   'p' => {
+                       self.mode = Mode::Normal;
+                       if let Some((start_idx, end_idx)) = self.get_selected_range() {
+                           let coppied_text = self
+                               .clipboard
+                               .get_text()
+                               .expect("Could not set value to system clipboard");
+                           self.past_states.push(self.text.clone());
+                           self.future_states = vec![];
+                           let _ = self.text.try_remove(start_idx..end_idx);
+                           let _ = self.text.try_insert(start_idx, &coppied_text);
+                       }
+                   }
+                   'd' => {
+                       self.mode = Mode::Normal;
+                       if let Some((start_idx, end_idx)) = self.get_selected_range() {
+                           self.future_states = vec![];
+                           self.past_states.push(self.text.clone());
+                           let _ = self.text.try_remove(start_idx..end_idx);
+                           self.recenter();
+                       }
+                       self.start_select_pos = None;
+                       self.end_select_pos = None;
+                   }
+                   _ => (),
+               }
+        */
+        Ok(vec![])
+    }
+
+    pub fn handle_operator_token(&mut self, token: OperatorToken) -> AnyHowResult<Vec<Token>> {
+        /*
+            OperatorToken::parse(OperatorToken::tokenize(c.to_string()))
+        {
+            if let Some(operator) = operators.get(0) {
+                self.operator = Some(*operator);
+            }
+        }
+         */
+        Ok(vec![])
+    }
+
+    pub fn handle_range_token(&mut self, token: RangeToken) -> AnyHowResult<Vec<Token>> {
+        /*
+           if let Some(range_command) = RangeToken::parse(RangeToken::tokenize(c.to_string()))
+               .unwrap_or_default()
+               .get(0)
+           {
+               if let Some((start_range, end_range)) = self.find_range(range_command) {
+                   match operator {
+                       OperatorToken::Yank => {
+                           self.yank_range(start_range.into(), end_range.into())
+                       }
+                       _ => (),
+                   }
+               }
+           }
+           self.operator = None;
+
+                   if self.mode == self::Mode::Command {
+                       self.set_normal_mode();
+                   }
+        */
+        Ok(vec![])
+    }
+
+    pub fn handle_token(&mut self, token: Token) -> AnyHowResult<Vec<Token>> {
+        match token {
+            Token::Append(t) => self.handle_append_token(t),
+            Token::Command(t) => self.handle_command_token(t),
+            Token::Insert(t) => self.handle_insert_token(t),
+            Token::Normal(t) => self.handle_normal_token(t),
+            Token::Operator(t) => self.handle_operator_token(t),
+            Token::Range(t) => self.handle_range_token(t),
+        }
+    }
+
+    pub async fn receive_tokens(
+        &mut self,
+        mut rx: impl Stream<Item = Token> + Unpin,
+        mut tx: postage::broadcast::Sender<Token>,
+    ) {
+        while let Some(token) = rx.recv().await {
+            self.handle_token(token);
         }
     }
 }

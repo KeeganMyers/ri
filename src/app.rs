@@ -1,5 +1,9 @@
 use crate::util::event::{Config, Event};
-use crate::{Buffer, Window};
+use crate::{
+    token::{CommandToken, NormalToken, Token},
+    Buffer, Window,
+};
+use anyhow::Result as AnyhowResult;
 use ropey::Rope;
 use syntect::{
     highlighting::ThemeSet,
@@ -205,6 +209,7 @@ impl App {
     }
 
     pub fn on_event(&mut self, event: Event<Key>, config: &Config) {
+        /*
         if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
             if let Event::Input(Key::Char('\n')) = event {
                 if buffer.mode == Mode::Command {
@@ -215,5 +220,10 @@ impl App {
                 self.should_quit = buffer.should_quit;
             }
         }
+        */
+    }
+
+    pub fn handle_token(token: Token) -> AnyhowResult<Vec<Token>> {
+        unimplemented!()
     }
 }
