@@ -4,18 +4,20 @@ pub mod insert_token;
 pub mod normal_token;
 pub mod operator_token;
 pub mod range_token;
+pub mod display_token;
 use crate::util::event::Event;
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use std::convert::TryFrom;
 use termion::event::Key;
 
-use crate::{App, Mode};
+use crate::{Mode};
 pub use append_token::AppendToken;
 pub use command_token::CommandToken;
 pub use insert_token::InsertToken;
 pub use normal_token::NormalToken;
 pub use operator_token::OperatorToken;
 pub use range_token::RangeToken;
+pub use display_token::DisplayToken;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
@@ -25,10 +27,11 @@ pub enum Token {
     Normal(NormalToken),
     Operator(OperatorToken),
     Range(RangeToken),
+    Display(DisplayToken)
 }
 
-pub fn get_token_from_str(app: &App, input: &String) -> AnyHowResult<Token> {
-    match app.mode() {
+pub fn get_token_from_str(mode: &Mode, input: &String) -> AnyHowResult<Token> {
+    match mode {
         Mode::Normal => {
             if let Ok(normal) = NormalToken::try_from(input) {
                 Ok(Token::Normal(normal))
@@ -47,8 +50,8 @@ pub fn get_token_from_str(app: &App, input: &String) -> AnyHowResult<Token> {
     }
 }
 
-pub fn get_token_from_key(app: &App, event: &Event<Key>) -> AnyHowResult<Token> {
-    match app.mode() {
+pub fn get_token_from_key(mode: &Mode, event: &Event<Key>) -> AnyHowResult<Token> {
+    match mode {
         Mode::Normal => {
             if let Ok(normal) = NormalToken::try_from(event) {
                 Ok(Token::Normal(normal))

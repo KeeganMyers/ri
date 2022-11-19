@@ -1,16 +1,13 @@
 use crate::app::Mode;
-use crate::{
-    token::{
-        AppendToken, CommandToken, InsertToken, NormalToken, OperatorToken, RangeToken, Token,
-    },
-    util::event::{Config, Event},
+use flume::{Sender,Receiver};
+use crate::token::{
+    AppendToken, CommandToken, InsertToken, NormalToken, OperatorToken, RangeToken, Token,
+    DisplayToken
 };
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use arboard::Clipboard;
 use log::trace;
-use postage::{broadcast, prelude::Stream};
 use ropey::Rope;
-use termion::event::Key;
 use uuid::Uuid;
 
 pub struct Buffer {
@@ -21,8 +18,6 @@ pub struct Buffer {
     pub file_path: Option<String>,
     pub command_text: Option<String>,
     pub operator: Option<OperatorToken>,
-    pub y_offset: u16,
-    pub x_offset: u16,
     pub x_pos: u16,
     pub y_pos: u16,
     pub start_select_pos: Option<usize>,
@@ -305,8 +300,6 @@ impl Buffer {
                     future_states: vec![],
                     x_pos: 0,
                     y_pos: 0,
-                    x_offset: 0,
-                    y_offset: 0,
                     file_path: Some(file_path),
                     text: rope,
                     command_text: None,
@@ -327,8 +320,6 @@ impl Buffer {
                 future_states: vec![],
                 x_pos: 0,
                 y_pos: 0,
-                x_offset: 0,
-                y_offset: 0,
                 file_path: None,
                 text: Rope::new(),
                 command_text: None,
@@ -340,7 +331,7 @@ impl Buffer {
     }
 
     pub fn handle_append_token(&mut self, token: AppendToken) -> AnyHowResult<Vec<Token>> {
-        match token {
+        let _ = match token {
             AppendToken::Enter => {
                 let char_idx = self.get_cursor_idx() + 1;
                 self.past_states.push(self.text.clone());
@@ -447,7 +438,7 @@ impl Buffer {
     }
 
     pub fn handle_normal_token(&mut self, token: NormalToken) -> AnyHowResult<Vec<Token>> {
-        match token {
+        let _ = match token {
             NormalToken::Up => Ok(self.on_up()),
             NormalToken::Down => Ok(self.on_down()),
             NormalToken::Left => Ok(self.on_left()),
@@ -581,16 +572,17 @@ impl Buffer {
             Token::Normal(t) => self.handle_normal_token(t),
             Token::Operator(t) => self.handle_operator_token(t),
             Token::Range(t) => self.handle_range_token(t),
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
         }
     }
 
     pub async fn receive_tokens(
         &mut self,
-        mut rx: impl Stream<Item = Token> + Unpin,
-        mut tx: postage::broadcast::Sender<Token>,
+        rx: Receiver<Token>,
+        tx: Sender<Token>,
     ) {
-        while let Some(token) = rx.recv().await {
-            self.handle_token(token);
+        while let Ok(token) = rx.recv_async().await {
+            let _ = self.handle_token(token);
         }
     }
 }

@@ -1,44 +1,39 @@
+use crate::app::Mode;
+use tui::layout::Rect;
+use uuid::Uuid;
+
 #[derive(Debug, Copy, Clone)]
 pub struct WindowPosition {
     pub y: u32,
     pub x: u32,
 }
 
+#[derive(Default)]
 pub struct Window {
+    pub id: Uuid,
     pub title: String,
-    pub should_quit: bool,
     pub current_percent_size: u16,
-    pub buffer_idx: u16,
+    pub buffer_id: Uuid,
+    pub y_offset: u16,
+    pub x_offset: u16,
+    pub x_pos: u16,
+    pub y_pos: u16,
+    pub mode: Mode,
+    pub page_size: u16,
+    pub current_page: u16,
+    pub area: Rect,
 }
-
-/*
-#[derive(Debug, Copy, Clone)]
-pub struct WindowSize {
-    pub height: u32,
-    pub width: u32,
-}
-
-pub trait Window {
-    fn get_size(&self) -> WindowSize;
-    fn refresh(&self);
-    fn append_str(&self, s: &str);
-    fn save_cursor_pos(&self);
-    fn restore_cursor_pos(&self);
-}
-
-pub trait Layout {
-    fn create_view_window(&self) -> impl Window;
-    fn create_new_status_bar_window(&self) -> impl Window;
-}
-*/
 
 impl Window {
-    pub fn new(buffer_idx: u16) -> Self {
-        Self {
-            title: "".to_string(),
-            should_quit: false,
-            current_percent_size: 50,
-            buffer_idx,
-        }
+    pub fn new(_buffer_idx: u16) -> Self {
+        Self::default()
+    }
+
+    pub fn display_x_pos(&self) -> u16 {
+        self.x_pos + self.x_offset
+    }
+
+    pub fn display_y_pos(&self) -> u16 {
+        (self.y_pos + self.y_offset) - self.current_page
     }
 }

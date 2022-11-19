@@ -1,15 +1,19 @@
-use crate::util::event::{Config, Event};
 use crate::{
-    token::{CommandToken, NormalToken, Token},
+    token::{CommandToken, get_token_from_key, get_token_from_str, Token,DisplayToken},
     Buffer, Window,
 };
-use anyhow::Result as AnyhowResult;
+
+use std::collections::HashMap;
+use termion::event::Key;
+use std::{ time::Duration};
+use crate::util::event::{Config, Event, Events};
+use anyhow::{Error as AnyHowError, Result as AnyHowResult};
+use flume::{Sender,Receiver};
 use ropey::Rope;
 use syntect::{
     highlighting::ThemeSet,
     parsing::{SyntaxReference, SyntaxSet},
 };
-use termion::event::Key;
 use uuid::Uuid;
 
 #[derive(Deserialize, PartialEq, Eq, Debug)]
@@ -34,148 +38,27 @@ pub enum Mode {
     Command,
 }
 
+impl Default for Mode {
+    fn default() -> Self {
+        Mode::Normal
+    }
+}
+
 pub struct App {
-    // pub current_tab: u8,
-    // pub tabs: Option<Vec<Tab>>,
     pub syntax_set: SyntaxSet,
     pub theme_set: ThemeSet,
     pub syntax: SyntaxReference,
-    pub current_window: u8,
-    pub windows: Vec<Window>,
-    pub buffers: Vec<Buffer>,
-    pub current_buffer: usize,
+    pub buffers: HashMap<Uuid,Buffer>,
+    pub current_buffer_id: Uuid,
     pub should_quit: bool,
 }
 
 impl App {
-    pub fn on_save(&mut self) -> Result<(), std::io::Error> {
-        if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
-            return buffer.on_save();
-        }
-        Ok(())
-    }
-
-    pub fn x_pos(&self) -> u16 {
-        self.buffers
-            .get(self.current_buffer)
-            .map(|b| b.x_pos)
-            .unwrap_or_default()
-    }
-    pub fn display_x_pos(&self) -> u16 {
-        self.buffers
-            .get(self.current_buffer)
-            .map(|b| b.x_pos + b.x_offset)
-            .unwrap_or_default()
-    }
-
-    pub fn y_pos(&self) -> u16 {
-        self.buffers
-            .get(self.current_buffer)
-            .map(|b| b.y_pos)
-            .unwrap_or_default()
-    }
-
-    pub fn display_y_pos(&self) -> u16 {
-        self.buffers
-            .get(self.current_buffer)
-            .map(|b| (b.y_pos + b.y_offset) - b.current_page)
-            .unwrap_or_default()
-    }
-
-    pub fn set_y_offset(&mut self, offset: u16) {
-        if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
-            buffer.y_offset = offset
-        }
-    }
-
-    pub fn set_x_offset(&mut self, offset: u16) {
-        if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
-            buffer.x_offset = offset
-        }
-    }
-
     pub fn mode(&self) -> Mode {
         self.buffers
-            .get(self.current_buffer)
+            .get(&self.current_buffer_id)
             .map(|b| b.mode.clone())
             .unwrap_or(Mode::Normal)
-    }
-
-    pub fn current_page(&self) -> Option<u16> {
-        self.buffers
-            .get(self.current_buffer)
-            .map(|b| b.current_page)
-    }
-
-    pub fn command_text(&self) -> Option<String> {
-        self.buffers
-            .get(self.current_buffer)
-            .and_then(|b| b.command_text.clone())
-    }
-
-    pub fn title(&self) -> Option<String> {
-        self.buffers
-            .get(self.current_buffer)
-            .map(|b| b.title.clone())
-    }
-
-    pub fn set_command_text(&mut self, text: &str) {
-        if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
-            buffer.command_text = Some(text.to_owned())
-        }
-    }
-
-    pub fn buffer_at(&self, idx: usize) -> Option<Rope> {
-        self.buffers.get(idx).map(|b| b.text.clone())
-    }
-
-    pub fn buffer_id_at(&self, idx: usize) -> Option<Uuid> {
-        self.buffers.get(idx).map(|b| b.id)
-    }
-
-    pub fn parse_command(&mut self, _config: &Config) {
-        if let Some(command_text) = &self.command_text() {
-            let command_str = command_text.replace(":", "");
-            let command_vec = command_str.split(" ").collect::<Vec<_>>();
-            match &command_vec
-                .get(0)
-                .map(|c| serde_plain::from_str::<Command>(c))
-            {
-                Some(Ok(Command::Quit)) => {
-                    self.should_quit = true;
-                }
-                Some(Ok(Command::Write)) => {
-                    let _ = self.on_save();
-                    self.set_normal_mode();
-                }
-                Some(Ok(Command::TabNew)) => {
-                    self.set_normal_mode();
-                }
-                Some(Ok(Command::VerticalSplit)) => {
-                    if let Some(file_name) = command_vec.get(1).map(|f| f.to_string()) {
-                        let buffer = if let Ok(buffer) = Buffer::new(Some(file_name)) {
-                            buffer
-                        } else {
-                            Buffer::new(None).unwrap()
-                        };
-                        self.buffers.push(buffer);
-                        self.windows
-                            .push(Window::new((self.buffers.len() - 1) as u16));
-                    } else {
-                        self.windows.push(Window::new(0));
-                    }
-                    self.set_normal_mode();
-                }
-                Some(Ok(Command::Split)) => {
-                    self.set_command_text("tried to split");
-                    self.set_normal_mode();
-                }
-                Some(Err(_)) | None => {
-                    self.set_command_text("Unreconginzed command");
-                    self.set_normal_mode();
-                }
-            }
-        }
     }
 
     pub fn new(file_name: Option<String>) -> Result<App, std::io::Error> {
@@ -184,16 +67,15 @@ impl App {
                 let ps = SyntaxSet::load_defaults_newlines();
                 let ts = ThemeSet::load_defaults();
                 let syntax = ps.find_syntax_by_extension("rs").clone();
+                let mut buff_map = HashMap::new();
+                let buff_id = buffer.id.clone();
+                buff_map.insert(buffer.id,buffer);
                 Ok(Self {
-                    //current_tab: 0,
-                    //tabs: None,
                     syntax_set: ps.clone(),
                     theme_set: ts,
                     syntax: syntax.clone().unwrap().to_owned(),
-                    current_window: 0,
-                    current_buffer: 0,
-                    buffers: vec![buffer],
-                    windows: vec![Window::new(0)],
+                    current_buffer_id: buff_id,
+                    buffers: buff_map,
                     should_quit: false,
                 })
             }
@@ -201,29 +83,83 @@ impl App {
         }
     }
 
-    pub fn set_normal_mode(&mut self) {
-        if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
-            buffer.mode = Mode::Normal;
-            self.set_command_text("");
+    pub fn handle_command_token(&mut self, token: CommandToken) -> AnyHowResult<Vec<Token>> {
+        let _ = match token {
+            CommandToken::Quit => {
+                self.should_quit = true;
+                Ok(())
+            },
+            CommandToken::TabNew => {
+                    Ok(())
+            },
+            CommandToken::VerticalSplit(f_name) => {
+                    if let Some(file_name) = f_name {
+                        let buffer = if let Ok(buffer) = Buffer::new(Some(file_name)) {
+                            buffer
+                        } else {
+                            Buffer::new(None).unwrap()
+                        };
+                        self.buffers.insert(buffer.id,buffer);
+                        //add NewVerticalWindow(WindowChange),
+                    } else {
+                        //add NewVerticalWindow(WindowChange),
+                    }
+                    //set current buffer to normal
+                    Ok(())
+            },
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+        };
+        Ok(vec![])
+    }
+
+    pub fn handle_token(&mut self, token: Token) -> AnyHowResult<Vec<Token>> {
+        match token {
+            //Token::Append(t) => self.handle_append_token(t),
+            Token::Command(t) => self.handle_command_token(t),
+            //Token::Insert(t) => self.handle_insert_token(t),
+            //Token::Normal(t) => self.handle_normal_token(t),
+            //Token::Operator(t) => self.handle_operator_token(t),
+            //Token::Range(t) => self.handle_range_token(t),
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
         }
     }
 
-    pub fn on_event(&mut self, event: Event<Key>, config: &Config) {
-        /*
-        if let Some(buffer) = self.buffers.get_mut(self.current_buffer) {
-            if let Event::Input(Key::Char('\n')) = event {
-                if buffer.mode == Mode::Command {
-                    self.parse_command(config);
+    pub async fn receive_tokens(
+        file_name: Option<String>,
+        _rx: Receiver<Token>,
+        tx: Sender<Token>) -> AnyHowResult<()>
+    {
+        let config = Config {
+            tick_rate: Duration::from_millis(500),
+            ..Config::default()
+        };
+
+        let events = Events::with_config(config.clone());
+        let event = events.next()?;
+        let mut token_str = String::new();
+        let mut app = App::new(file_name)?;
+        log::info!("Sending display token");
+        let _ = tx.send_async(Token::Display(DisplayToken::DrawViewPort)).await;
+        loop {
+            if !app.should_quit {
+                if let Ok(token) = get_token_from_key(&app.mode(), &event) {
+                    token_str.truncate(0);
+                    let _ = app.handle_token(token.clone());
+                    let _ = tx.send_async(token).await;
+                } else if let Event::Input(Key::Char(c)) = event {
+                    token_str.push_str(&c.to_string());
+                    if let Ok(token) = get_token_from_str(&app.mode(), &token_str) {
+                        token_str.truncate(0);
+                        let _ = app.handle_token(token.clone());
+                        let _ = tx.send_async(token).await;
+                    }
                 }
-            } else {
-                buffer.on_event(event, config);
-                self.should_quit = buffer.should_quit;
+            }
+
+            if app.should_quit {
+                break;
             }
         }
-        */
-    }
-
-    pub fn handle_token(token: Token) -> AnyhowResult<Vec<Token>> {
-        unimplemented!()
+        Ok(())
     }
 }
