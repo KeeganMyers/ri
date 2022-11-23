@@ -2,7 +2,7 @@ use crate::app::Mode;
 use flume::{Sender,Receiver};
 use crate::token::{
     AppendToken, CommandToken, InsertToken, NormalToken, OperatorToken, RangeToken, Token,
-    DisplayToken
+    display_token::{DisplayToken,WindowChange}
 };
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use arboard::Clipboard;
@@ -480,7 +480,19 @@ impl Buffer {
             }
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
         };
-        Ok(vec![])
+        Ok(vec![
+           Token::Display(DisplayToken::UpdateWindow(WindowChange {
+                                id: self.id,
+                                x_pos: self.x_pos,
+                                y_pos: self.y_pos,
+                                mode: self.mode.clone(),
+                                title: Some(self.title.clone()),
+                                page_size: self.page_size,
+                                current_page: self.current_page,
+                                ..WindowChange::default()
+           })),
+           Token::Display(DisplayToken::DrawViewPort)
+        ])
     }
 
     pub fn handle_visual_token(&mut self, token: Token) -> AnyHowResult<Vec<Token>> {
@@ -544,7 +556,7 @@ impl Buffer {
         /*
            if let Some(range_command) = RangeToken::parse(RangeToken::tokenize(c.to_string()))
                .unwrap_or_default()
-               .get(0)
+            mut    .get(0)
            {
                if let Some((start_range, end_range)) = self.find_range(range_command) {
                    match operator {
@@ -566,12 +578,27 @@ impl Buffer {
 
     pub fn handle_token(&mut self, token: Token) -> AnyHowResult<Vec<Token>> {
         match token {
-            Token::Append(t) => self.handle_append_token(t),
-            Token::Command(t) => self.handle_command_token(t),
-            Token::Insert(t) => self.handle_insert_token(t),
+            Token::Append(t) => {
+                self.handle_append_token(t);
+                Ok(vec![])
+            },
+            Token::Command(t) => {
+                self.handle_command_token(t);
+                Ok(vec![])
+            },
+            Token::Insert(t) => {
+                self.handle_insert_token(t);
+                Ok(vec![])
+            },
             Token::Normal(t) => self.handle_normal_token(t),
-            Token::Operator(t) => self.handle_operator_token(t),
-            Token::Range(t) => self.handle_range_token(t),
+            Token::Operator(t) => {
+                self.handle_operator_token(t);
+                Ok(vec![])
+            }
+            Token::Range(t) => {
+                self.handle_range_token(t);
+                Ok(vec![])
+            },
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
         }
     }

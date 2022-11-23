@@ -6,7 +6,7 @@ use termion::event::Key;
 use uuid::Uuid;
 use crate::app::Mode;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default,PartialEq)]
 pub struct WindowChange {
     pub id: Uuid,
     pub x_pos: u16,
@@ -18,15 +18,17 @@ pub struct WindowChange {
     pub current_page: u16,
 }
 
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum DisplayToken {
+    SetHighlight,
     UpdateWindow(WindowChange),
     NewVerticalWindow(WindowChange),
     NewHorizontalWindow(WindowChange),
     DropWindow(Uuid),
     DrawViewPort,
     DrawWindow(Uuid),
-    CacheWindowContent(Rope)
+    CacheWindowContent(Uuid,Rope)
 }
 
 pub const PARSE_FAILURE_ERR: &'static str = "Unknown Token";

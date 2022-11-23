@@ -3,7 +3,8 @@ use ropey::Rope;
 use flume::{Sender,Receiver};
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use crate::token::{
-    AppendToken, CommandToken, InsertToken, NormalToken, OperatorToken, RangeToken, Token,DisplayToken
+    AppendToken, CommandToken, InsertToken, NormalToken, OperatorToken, RangeToken, Token,
+    display_token::{DisplayToken}
 };
 use std::io::{stdout,Stdout};
 use termion::{input::MouseTerminal, raw::{RawTerminal,IntoRawMode}, screen::AlternateScreen};
@@ -28,6 +29,7 @@ use tui::{
 use uuid::Uuid;
 pub type Term = Terminal<TermionBackend<AlternateScreen<MouseTerminal<RawTerminal<Stdout>>>>>;
 pub struct Ui<'a> {
+    pub should_quit: bool,
     pub windows: HashMap<Uuid, Window>,
     pub syntax_set: Option<SyntaxSet>,
     pub theme_set: Option<ThemeSet>,
@@ -95,8 +97,6 @@ impl<'a> Ui<'a> {
             )
             .split(self.text_area);
         for (split, window) in text_splits.iter().zip(self.windows.values()) {
-            //window.y_offset = self.text_area.top();
-            //window.x_offset = 4;
             Self::draw_text(f, &self.highlight_cache, &self.line_num_cache, split, window)
         }
         Self::draw_footer(
@@ -121,26 +121,25 @@ impl<'a> Ui<'a> {
         (area[0],area[1],area[2])
     }
 
-    fn cache_formatted_text(&self,text: Rope,window: Window,highlight_cache: &mut HashMap<Uuid, Vec<Spans>>) {
-        //&self.theme_set.themes["base16-ocean.dark"];
-        let theme = self.theme.clone().unwrap();
-        let mut highlight = HighlightLines::new(&self.syntax.clone().unwrap(), &theme);
+    async fn cache_formatted_text(&mut self,text: &Rope,id: Uuid) {
+        if let (Some(syntax),Some(theme)) = (&self.syntax,&self.theme) {
+        let mut highlight = HighlightLines::new(syntax, theme);
         let mut spans: Vec<Spans> = vec![];
         let rope_str = text.to_string();
         let text_lines = LinesWithEndings::from(Box::leak(Box::new(rope_str)));
         for line in text_lines {
-
             if let Ok(hs) = highlight.highlight_line(line, &self.syntax_set.clone().unwrap()) {
                 spans.push(Self::to_spans(hs.clone()));
             }
         }
-        highlight_cache.insert(window.buffer_id, spans.clone());
+        self.highlight_cache.insert(id, spans.clone());
+        }
     }
 
-    fn cache_line_numbers(&self,text: Rope,window: Window,line_numbers: &mut HashMap<Uuid, Spans>) {
+    async fn cache_line_numbers(&mut self,text: &Rope,id: Uuid) {
                 let line_count = text.len_lines();
                 let local_line_nums = Self::line_number_spans(line_count);
-                line_numbers.insert(window.buffer_id, local_line_nums.clone());
+                self.line_num_cache.insert(id, local_line_nums.clone());
     }
 
     fn draw_text<B>(
@@ -158,7 +157,6 @@ impl<'a> Ui<'a> {
             .split(*area);
         let line_number_area = inner_text_splits[0];
         let text_area = inner_text_splits[1];
-
         if let Some(cached_highlights) = highlight_cache.get(&window.buffer_id) {
             let paragraph = Paragraph::new(cached_highlights.clone())
                 .alignment(Alignment::Left)
@@ -229,26 +227,84 @@ impl<'a> Ui<'a> {
         f.render_widget(paragraph, area);
     }
 
-    fn handle_display_token(&mut self,terminal: &mut Term,token: DisplayToken) -> AnyHowResult<Vec<Token>> {
+    async fn handle_display_token(&mut self,terminal: &mut Term,token: DisplayToken) -> AnyHowResult<Vec<Token>> {
         match token {
            DisplayToken::DrawViewPort => {
             let _ = terminal.draw(|f| {
                 self.draw(f) 
             });
-            ()
            },
+           DisplayToken::SetHighlight => {
+                let ps = SyntaxSet::load_defaults_newlines();
+                let ts = ThemeSet::load_defaults();
+                let syntax = ps.find_syntax_by_extension("rs").clone();
+                let theme = ts.themes["base16-ocean.dark"].clone();
+               self.syntax_set = Some(ps.clone());
+               self.theme_set = Some(ts);
+               if let Some(s) = syntax {
+                   self.syntax = Some(s.clone());
+               }
+               self.theme = Some(theme);
+           },
+           DisplayToken::NewVerticalWindow(change) => {
+               let window = Window {
+                   id: change.id,
+                   buffer_id: change.id,
+                   x_pos: change.x_pos,
+                   y_pos: change.y_pos,
+                   mode: change.mode,
+                   title: change.title.unwrap_or_default(),
+                   page_size: change.page_size,
+                   current_page: change.current_page,
+                   y_offset: self.text_area.top(),
+                   x_offset: 4,
+                   ..Window::default()
+               };
+               self.windows.insert(change.id,window);
+               self.current_window_id = change.id;
+           },
+           DisplayToken::UpdateWindow(change) => {
+               if let Some(window) = self.windows.get_mut(&change.id) {
+                   window.x_pos = change.x_pos;
+                   window.y_pos = change.y_pos;
+                   window.mode = change.mode;
+                   window.title = change.title.unwrap_or_default();
+                   window.page_size = change.page_size;
+                   window.current_page = change.current_page;
+                   window.y_offset = self.text_area.top();
+                   window.x_offset= 4;
+               }
+           },
+           DisplayToken::CacheWindowContent(id,text) => {
+               self.cache_formatted_text(&text,id).await;
+               self.cache_line_numbers(&text,id).await;
+           },
+           DisplayToken::DrawWindow(window_id) => {
+               unimplemented!()
+           }
             _ => (),
         };
         
         Ok(vec![])
     }
 
-    pub fn handle_token(&mut self, terminal: &mut Term,token: Token) -> AnyHowResult<Vec<Token>> {
+    async fn handle_command_token(&mut self,terminal: &mut Term,token: CommandToken) -> AnyHowResult<Vec<Token>> {
         let _ = match token {
-            Token::Display(t) => self.handle_display_token(terminal,t),
+            CommandToken::Quit => {
+                self.should_quit = true;
+                Ok(())
+            },
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+        };
+        Ok(vec![])
+    }
+
+    pub async fn handle_token(&mut self, terminal: &mut Term,token: Token) -> AnyHowResult<Vec<Token>> {
+        let _ = match token {
+            Token::Display(t) => self.handle_display_token(terminal,t).await,
+            Token::Command(t) => self.handle_command_token(terminal,t).await,
             /*
             Token::Append(t) => self.handle_append_token(t),
-            Token::Command(t) => self.handle_command_token(t),
             Token::Insert(t) => self.handle_insert_token(t),
             Token::Normal(t) => self.handle_normal_token(t),
             Token::Operator(t) => self.handle_operator_token(t),
@@ -262,6 +318,7 @@ impl<'a> Ui<'a> {
     pub fn new(terminal: &mut Term) -> AnyHowResult<Self> {
         let (head_area,text_area,foot_area) = Ui::create_layout(&terminal.get_frame());
         let ui = Self {
+            should_quit: false,
             windows: HashMap::new(),
             syntax_set: None,
             theme_set: None,
@@ -288,12 +345,9 @@ impl<'a> Ui<'a> {
         let backend = TermionBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
         let mut ui = Self::new(&mut terminal)?;
-        log::info!("starting display");
-        while let Ok(token) = rx.recv_async().await {
-            log::info!("display got token {:?}",token);
-            let _ = ui.handle_token(&mut terminal,token);
+        while let (Ok(token),false) = (rx.recv_async().await,ui.should_quit) {
+            let _ = ui.handle_token(&mut terminal,token).await;
         }
-        log::info!("got no tokens closing display");
         Ok(())
     }
 }
