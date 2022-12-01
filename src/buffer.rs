@@ -1,6 +1,7 @@
 use crate::app::Mode;
 use flume::{Sender,Receiver};
 use crate::token::{
+    get_token_from_str,
     AppendToken, CommandToken, InsertToken, NormalToken, OperatorToken, RangeToken, Token,
     display_token::{DisplayToken,WindowChange}
 };
@@ -374,33 +375,43 @@ impl Buffer {
         match token {
             CommandToken::Quit => {
                 self.should_quit = true;
-                Ok(())
-            }
+                Ok(vec![])
+            },
             CommandToken::Write => {
                 self.on_save();
-                Ok(())
-            }
+                Ok(vec![])
+            },
             CommandToken::Esc => {
                 self.set_normal_mode();
-                Ok(())
-            }
+                Ok(vec![])
+            },
             CommandToken::Append(chars) => {
                 self.command_text = self.command_text.clone().map(|mut t| {
                     t.push_str(&chars);
                     t
                 });
-                Ok(())
-            }
+                Ok(vec![Token::Display(DisplayToken::AppendCommand(self.id,
+                                                              self.command_text.clone())),
+                        Token::Display(DisplayToken::DrawViewPort)
+                ])
+            },
             CommandToken::Remove => {
                 self.command_text = self.command_text.clone().map(|mut t| {
                     t.truncate(t.len() - 1);
                     t
                 });
-                Ok(())
-            }
+                Ok(vec![])
+            },
+            CommandToken::Enter => {
+                if let Some(command_text) = &self.command_text {
+                    if let Ok(Token::Command(command)) = get_token_from_str(&Mode::Command,&format!(":{}",command_text)) {
+                        return self.handle_command_token(command);
+                    }
+                }
+                Ok(vec![])
+            },
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
-        };
-        Ok(vec![])
+        }
     }
 
     pub fn handle_insert_token(&mut self, token: InsertToken) -> AnyHowResult<Vec<Token>> {
@@ -434,7 +445,21 @@ impl Buffer {
             }
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
         };
-        Ok(vec![])
+
+        Ok(vec![
+            Token::Display(DisplayToken::CacheWindowContent(self.id,self.text.clone())),
+            Token::Display(DisplayToken::UpdateWindow(WindowChange {
+                                id: self.id,
+                                x_pos: self.x_pos,
+                                y_pos: self.y_pos,
+                                mode: self.mode.clone(),
+                                title: Some(self.title.clone()),
+                                page_size: self.page_size,
+                                current_page: self.current_page,
+                                ..WindowChange::default()
+            })),
+            Token::Display(DisplayToken::DrawViewPort)
+        ])
     }
 
     pub fn handle_normal_token(&mut self, token: NormalToken) -> AnyHowResult<Vec<Token>> {
@@ -582,14 +607,8 @@ impl Buffer {
                 self.handle_append_token(t);
                 Ok(vec![])
             },
-            Token::Command(t) => {
-                self.handle_command_token(t);
-                Ok(vec![])
-            },
-            Token::Insert(t) => {
-                self.handle_insert_token(t);
-                Ok(vec![])
-            },
+            Token::Command(t) => self.handle_command_token(t),
+            Token::Insert(t) => self.handle_insert_token(t),
             Token::Normal(t) => self.handle_normal_token(t),
             Token::Operator(t) => {
                 self.handle_operator_token(t);

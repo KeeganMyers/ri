@@ -8,7 +8,7 @@ pub struct WindowPosition {
     pub x: u32,
 }
 
-#[derive(Default)]
+#[derive(Default,Debug)]
 pub struct Window {
     pub id: Uuid,
     pub title: String,
@@ -22,6 +22,7 @@ pub struct Window {
     pub page_size: u16,
     pub current_page: u16,
     pub area: Rect,
+    pub command_text: Option<String>
 }
 
 impl Window {

@@ -35,7 +35,6 @@ pub struct Ui<'a> {
     pub theme_set: Option<ThemeSet>,
     pub theme: Option<Theme>,
     pub syntax: Option<SyntaxReference>,
-    pub command_text: Option<String>,
     pub current_window_id: Uuid,
     pub head_area: Rect,
     pub text_area: Rect,
@@ -193,7 +192,7 @@ impl<'a> Ui<'a> {
         B: Backend,
     {
         let block = Block::default().style(Style::default().fg(Color::Black).bg(Color::White));
-        let paragraph = Paragraph::new(self.command_text.clone().unwrap_or("".to_string()))
+        let paragraph = Paragraph::new(window.and_then(|w| w.command_text.clone()).unwrap_or("".to_string()))
             .block(block.clone())
             .alignment(Alignment::Left)
             .wrap(Wrap { trim: true });
@@ -281,7 +280,12 @@ impl<'a> Ui<'a> {
            },
            DisplayToken::DrawWindow(window_id) => {
                unimplemented!()
-           }
+           },
+           DisplayToken::AppendCommand(id,command) => {
+               if let Some(window) = self.windows.get_mut(&id) {
+                   window.command_text = command;
+               }
+            },
             _ => (),
         };
         
@@ -324,7 +328,6 @@ impl<'a> Ui<'a> {
             theme_set: None,
             theme: None,
             syntax: None,
-            command_text: None,
             current_window_id: Uuid::new_v4(),
             highlight_cache: HashMap::new(),
             line_num_cache: HashMap::new(),
@@ -345,8 +348,10 @@ impl<'a> Ui<'a> {
         let backend = TermionBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
         let mut ui = Self::new(&mut terminal)?;
-        while let (Ok(token),false) = (rx.recv_async().await,ui.should_quit) {
-            let _ = ui.handle_token(&mut terminal,token).await;
+        while !ui.should_quit {
+            if let Ok(token) = rx.recv_async().await {
+                let _ = ui.handle_token(&mut terminal,token).await;
+            }
         }
         Ok(())
     }

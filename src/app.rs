@@ -85,6 +85,16 @@ impl App {
                     //set current buffer to normal
                     Ok(())
             },
+            CommandToken::Enter => {
+                if let Some(buffer) = self.buffers.get_mut(&self.current_buffer_id) {
+                    if let Some(command_text) = &buffer.command_text {
+                        if let Ok(Token::Command(command)) = get_token_from_str(&Mode::Command,&format!(":{}",command_text)) {
+                            return self.handle_command_token(command);
+                        }
+                    }
+                }
+                Ok(())
+            },
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
         };
         Ok(vec![])
@@ -165,6 +175,7 @@ impl App {
             }
 
             if app.should_quit {
+                let _ = tx.send_async(Token::Command(CommandToken::Quit)).await;
                 break;
             }
         }

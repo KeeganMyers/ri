@@ -28,7 +28,8 @@ pub enum DisplayToken {
     DropWindow(Uuid),
     DrawViewPort,
     DrawWindow(Uuid),
-    CacheWindowContent(Uuid,Rope)
+    CacheWindowContent(Uuid,Rope),
+    AppendCommand(Uuid,Option<String>),
 }
 
 pub const PARSE_FAILURE_ERR: &'static str = "Unknown Token";

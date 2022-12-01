@@ -35,8 +35,6 @@ use tui::text::Spans;
 use tui::{backend::TermionBackend, Terminal};
 use util::event::{Config, Event, Events};
 use uuid::Uuid;
-#[macro_use]
-extern crate serde_derive;
 extern crate log;
 
 #[derive(Debug, FromArgs)]
