@@ -1,12 +1,12 @@
+use crate::app::Mode;
 use crate::util::event::Event;
-use ropey::Rope;
 use anyhow::Error as AnyHowError;
+use ropey::Rope;
 use std::{convert::TryFrom, iter::Iterator};
 use termion::event::Key;
 use uuid::Uuid;
-use crate::app::Mode;
 
-#[derive(Clone, Debug, Default,PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct WindowChange {
     pub id: Uuid,
     pub x_pos: u16,
@@ -18,7 +18,6 @@ pub struct WindowChange {
     pub current_page: u16,
 }
 
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum DisplayToken {
     SetHighlight,
@@ -28,8 +27,11 @@ pub enum DisplayToken {
     DropWindow(Uuid),
     DrawViewPort,
     DrawWindow(Uuid),
-    CacheWindowContent(Uuid,Rope),
-    AppendCommand(Uuid,Option<String>),
+    CacheWindowContent(Uuid, Rope),
+    AppendCommand(Uuid, Option<String>),
+    CacheCurrentLine(Uuid, Rope, usize),
+    CacheNewLine(Uuid, Rope, usize),
+    RemoveCacheLine(Uuid, Rope, usize),
 }
 
 pub const PARSE_FAILURE_ERR: &'static str = "Unknown Token";

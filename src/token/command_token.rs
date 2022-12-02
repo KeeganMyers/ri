@@ -22,11 +22,13 @@ impl TryFrom<&String> for CommandToken {
     type Error = AnyHowError;
     fn try_from(value: &String) -> Result<Self, Self::Error> {
         match &*(value.chars().collect::<Vec<char>>()) {
-            [':','q', ..] => Ok(Self::Quit),
-            [':','w', ..] => Ok(Self::Write),
+            [':', 'q', ..] => Ok(Self::Quit),
+            [':', 'w', ..] => Ok(Self::Write),
             ['\n', ..] => Ok(Self::Enter),
-            [':','v', 's', rest @ ..] => Ok(Self::VerticalSplit(Some(rest.iter().collect::<String>()))),
-            [':','s', 'p', rest @ ..] => Ok(Self::Split(Some(rest.iter().collect::<String>()))),
+            [':', 'v', 's', rest @ ..] => {
+                Ok(Self::VerticalSplit(Some(rest.iter().collect::<String>())))
+            }
+            [':', 's', 'p', rest @ ..] => Ok(Self::Split(Some(rest.iter().collect::<String>()))),
             [rest @ ..] => Ok(Self::Append(rest.iter().collect::<String>())),
         }
     }
