@@ -54,7 +54,6 @@ impl<'a> Ui<'a> {
                 style.foreground.g,
                 style.foreground.b,
             ))
-            .bg(Color::Black)
     }
 
     pub fn to_span(style: SyntectStyle, value: &str) -> Span {
@@ -90,7 +89,7 @@ impl<'a> Ui<'a> {
             .constraints(
                 self.windows
                     .values()
-                    .map(|w| Constraint::Percentage(w.current_percent_size))
+                    .map(|w| Constraint::Percentage(50))
                     .collect::<Vec<Constraint>>()
                     .as_ref(),
             )

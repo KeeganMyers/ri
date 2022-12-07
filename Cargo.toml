@@ -18,7 +18,7 @@ syntect = "5.0.0"
 uuid = {version = "1.2.1", features = ["v4"]}
 flume = "0.10.14"
 async-std = {version = "1.12.0",features = ["attributes"]}
-ra_ap_rust-analyzer = "0.0.141"
+#ra_ap_rust-analyzer = "0.0.141"
 
 #![feature(alloc_system)]
 #![feature(global_allocator, allocator_api)]

@@ -65,26 +65,43 @@ impl App {
     }
 
     pub fn handle_command_token(&mut self, token: CommandToken) -> AnyHowResult<Vec<Token>> {
-        let _ = match token {
+        match token {
             CommandToken::Quit => {
                 self.should_quit = true;
-                Ok(())
-            }
-            CommandToken::TabNew => Ok(()),
+                Ok(vec![])
+            },
+            CommandToken::TabNew => Ok(vec![]),
             CommandToken::VerticalSplit(f_name) => {
                 if let Some(file_name) = f_name {
-                    let buffer = if let Ok(buffer) = Buffer::new(Some(file_name)) {
+                    let buffer = if let Ok(buffer) = Buffer::new(Some(file_name.trim().to_string())) {
                         buffer
                     } else {
                         Buffer::new(None).unwrap()
                     };
+                let response = Ok(vec![Token::Display(DisplayToken::NewVerticalWindow(
+                    WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    },
+                )),
+                Token::Display(DisplayToken::CacheWindowContent(
+                    buffer.id,
+                    buffer.text.clone(),
+                )),
+                Token::Display(DisplayToken::DrawViewPort)
+                ]);
+                    self.current_buffer_id = buffer.id;
                     self.buffers.insert(buffer.id, buffer);
-                    //add NewVerticalWindow(WindowChange),
+                response
                 } else {
-                    //add NewVerticalWindow(WindowChange),
+                    Ok(vec![])
                 }
-                //set current buffer to normal
-                Ok(())
             }
             CommandToken::Enter => {
                 if let Some(buffer) = self.buffers.get_mut(&self.current_buffer_id) {
@@ -96,11 +113,10 @@ impl App {
                         }
                     }
                 }
-                Ok(())
+                Ok(vec![])
             }
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
-        };
-        Ok(vec![])
+        }
     }
 
     pub fn handle_token(&mut self, token: Token) -> AnyHowResult<Vec<Token>> {
@@ -163,7 +179,10 @@ impl App {
                 if let Ok(token) = get_token_from_key(&app.mode(), &event) {
                     token_str.truncate(0);
                     draw_events.push(token.clone());
-                    let _ = app.handle_token(token.clone());
+                    let mut app_events = app.handle_token(token.clone()).unwrap_or_default();
+                    if !app_events.is_empty() {
+                        draw_events.append(&mut app_events);
+                    }
                     if let Some(buffer) = app.buffers.get_mut(&app.current_buffer_id) {
                         if let Ok(mut buff_events) = buffer.handle_token(token.clone()) {
                             draw_events.append(&mut buff_events);
@@ -173,7 +192,10 @@ impl App {
                     token_str.push_str(&c.to_string());
                     if let Ok(token) = get_token_from_str(&app.mode(), &token_str) {
                         draw_events.push(token.clone());
-                        let _ = app.handle_token(token.clone());
+                        let mut app_events = app.handle_token(token.clone()).unwrap_or_default();
+                        if !app_events.is_empty() {
+                            draw_events.append(&mut app_events);
+                        }
                         if let Some(buffer) = app.buffers.get_mut(&app.current_buffer_id) {
                             if let Ok(mut buff_events) = buffer.handle_token(token.clone()) {
                                 draw_events.append(&mut buff_events);
