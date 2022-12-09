@@ -5,6 +5,7 @@ use ropey::Rope;
 use std::{convert::TryFrom, iter::Iterator};
 use termion::event::Key;
 use uuid::Uuid;
+use tui::layout::Direction;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WindowChange {
@@ -26,6 +27,7 @@ pub enum DisplayToken {
     NewHorizontalWindow(WindowChange),
     DropWindow(Uuid),
     DrawViewPort,
+    SetTextLayout(Direction),
     DrawWindow(Uuid),
     CacheWindowContent(Uuid, Rope),
     AppendCommand(Uuid, Option<String>),

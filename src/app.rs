@@ -3,19 +3,14 @@ use crate::{
         display_token::{DisplayToken, WindowChange},
         get_token_from_key, get_token_from_str, CommandToken, Token,
     },
-    Buffer, Window,
+    Buffer
 };
-
+use tui::layout::Direction;
 use crate::util::event::{Config, Event, Events};
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use flume::{Receiver, Sender};
-use ropey::Rope;
 use std::collections::HashMap;
 use std::time::Duration;
-use syntect::{
-    highlighting::ThemeSet,
-    parsing::{SyntaxReference, SyntaxSet},
-};
 use termion::event::Key;
 use uuid::Uuid;
 
@@ -71,6 +66,39 @@ impl App {
                 Ok(vec![])
             },
             CommandToken::TabNew => Ok(vec![]),
+            CommandToken::Split(f_name) => {
+                if let Some(file_name) = f_name {
+                    let buffer = if let Ok(buffer) = Buffer::new(Some(file_name.trim().to_string())) {
+                        buffer
+                    } else {
+                        Buffer::new(None).unwrap()
+                    };
+                let response = Ok(vec![Token::Display(DisplayToken::NewVerticalWindow(
+                    WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    },
+                )),
+                Token::Display(DisplayToken::SetTextLayout(Direction::Vertical)),
+                Token::Display(DisplayToken::CacheWindowContent(
+                    buffer.id,
+                    buffer.text.clone(),
+                )),
+                Token::Display(DisplayToken::DrawViewPort)
+                ]);
+                    self.current_buffer_id = buffer.id;
+                    self.buffers.insert(buffer.id, buffer);
+                response
+                } else {
+                    Ok(vec![])
+                }
+            }
             CommandToken::VerticalSplit(f_name) => {
                 if let Some(file_name) = f_name {
                     let buffer = if let Ok(buffer) = Buffer::new(Some(file_name.trim().to_string())) {
@@ -90,6 +118,7 @@ impl App {
                         ..WindowChange::default()
                     },
                 )),
+                Token::Display(DisplayToken::SetTextLayout(Direction::Horizontal)),
                 Token::Display(DisplayToken::CacheWindowContent(
                     buffer.id,
                     buffer.text.clone(),
@@ -133,7 +162,7 @@ impl App {
 
     pub async fn receive_tokens(
         file_name: Option<String>,
-        rx: Receiver<Token>,
+        _rx: Receiver<Token>,
         tx: Sender<Token>,
     ) -> AnyHowResult<()> {
         let config = Config {
@@ -161,6 +190,9 @@ impl App {
                         ..WindowChange::default()
                     },
                 )))
+                .await;
+            let _ = tx
+                .send_async(Token::Display(DisplayToken::SetTextLayout(Direction::Horizontal)))
                 .await;
             let _ = tx
                 .send_async(Token::Display(DisplayToken::CacheWindowContent(

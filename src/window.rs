@@ -8,7 +8,7 @@ pub struct WindowPosition {
     pub x: u32,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Clone,Debug)]
 pub struct Window {
     pub id: Uuid,
     pub title: String,
@@ -21,8 +21,10 @@ pub struct Window {
     pub mode: Mode,
     pub page_size: u16,
     pub current_page: u16,
-    pub area: Rect,
+    pub area: Option<Rect>,
     pub command_text: Option<String>,
+    pub bottom: Option<u16>,
+    pub right: Option<u16>
 }
 
 impl Window {
@@ -36,5 +38,12 @@ impl Window {
 
     pub fn display_y_pos(&self) -> u16 {
         (self.y_pos + self.y_offset) - self.current_page
+    }
+
+    pub fn get_origin(&self) -> Option<(u16,u16)> {
+        if let Some(area) = self.area {
+            return Some((area.x,area.y));
+        }
+        None
     }
 }

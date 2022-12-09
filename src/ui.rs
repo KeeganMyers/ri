@@ -1,6 +1,5 @@
 use crate::token::{
-    display_token::DisplayToken, AppendToken, CommandToken, InsertToken, NormalToken,
-    OperatorToken, RangeToken, Token,
+    display_token::DisplayToken,CommandToken,Token,
 };
 use crate::Window;
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
@@ -77,6 +76,36 @@ impl<'a> Ui<'a> {
         )
     }
 
+    pub fn set_text_layout(&mut self,direction: Direction) {
+        let text_area = if let Some(area) = self.windows.get(&self.current_window_id).and_then(|w| w.area) {
+            area
+        } else {
+            self.text_area
+        };
+        let text_splits = Layout::default()
+            .direction(direction)
+            .constraints(
+                self.windows
+                    .values()
+                    .map(|_w| Constraint::Percentage(50))
+                    .collect::<Vec<Constraint>>()
+                    .as_ref(),
+            )
+            .split(text_area);
+        let mut sorted_windows = self.windows.values().map(|w| w.clone()).collect::<Vec<Window>>();
+        sorted_windows.sort_by(|w_a,w_b| w_a.get_origin().cmp(
+        &w_b.get_origin())
+            );
+            
+        for (window_id,split) in sorted_windows.into_iter().map(|w| w.id).zip(text_splits) {
+            if let Some(window) = self.windows.get_mut(&window_id) {
+                window.area = Some(split);
+                window.bottom = Some(split.bottom());
+                window.right = Some(split.right());
+            }
+        }
+    }
+
     pub fn draw<B: Backend>(&self, f: &mut Frame<B>) {
         Self::draw_header(
             self,
@@ -84,24 +113,29 @@ impl<'a> Ui<'a> {
             f,
             self.head_area,
         );
-        let text_splits = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints(
-                self.windows
-                    .values()
-                    .map(|w| Constraint::Percentage(50))
-                    .collect::<Vec<Constraint>>()
-                    .as_ref(),
-            )
-            .split(self.text_area);
-        for (split, window) in text_splits.iter().zip(self.windows.values()) {
+        for window in self.windows.values() {
             Self::draw_text(
                 f,
                 &self.highlight_cache,
                 &self.line_num_cache,
-                split,
                 window,
-            )
+            );
+
+            if window.id == self.current_window_id {
+                let y_cursor = if window.display_y_pos() >= window.bottom.unwrap_or_default() {
+                    window.bottom.map(|b| b - 3).unwrap_or_default()
+                } else {
+                    window.display_y_pos()
+                };
+
+                let x_cursor = if window.display_x_pos() >= window.right.unwrap_or_default() {
+                    window.right.map(|r| r - 1).unwrap_or_default()
+                } else {
+                    window.display_x_pos()
+                };
+
+                f.set_cursor(x_cursor, y_cursor);
+            }
         }
         Self::draw_footer(
             self,
@@ -192,46 +226,34 @@ impl<'a> Ui<'a> {
         f: &mut Frame<B>,
         highlight_cache: &HashMap<Uuid, Vec<Spans>>,
         line_numbers: &HashMap<Uuid, Spans>,
-        area: &Rect,
         window: &Window,
     ) where
         B: Backend,
     {
-        let inner_text_splits = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Length(4), Constraint::Percentage(95)].as_ref())
-            .split(*area);
-        let line_number_area = inner_text_splits[0];
-        let text_area = inner_text_splits[1];
-        if let Some(cached_highlights) = highlight_cache.get(&window.buffer_id) {
-            let paragraph = Paragraph::new(cached_highlights.clone())
-                .alignment(Alignment::Left)
-                .wrap(Wrap { trim: false })
-                .scroll((window.current_page, window.x_pos));
-            f.render_widget(paragraph, text_area);
+        if let Some(area) = window.area {
+            let inner_text_splits = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Length(4), Constraint::Percentage(95)].as_ref())
+                .split(area);
+            let line_number_area = inner_text_splits[0];
+            let text_area = inner_text_splits[1];
+            if let Some(cached_highlights) = highlight_cache.get(&window.buffer_id) {
+                let paragraph = Paragraph::new(cached_highlights.clone())
+                    .alignment(Alignment::Left)
+                    .wrap(Wrap { trim: false })
+                    .scroll((window.current_page, window.x_pos));
+                f.render_widget(paragraph, text_area);
+            }
+
+
+            if let Some(line_numbers_cached) = line_numbers.get(&window.buffer_id) {
+                let line_number_p = Paragraph::new(line_numbers_cached.clone())
+                    .alignment(Alignment::Left)
+                    .wrap(Wrap { trim: false })
+                    .scroll((window.current_page, window.x_pos));
+                f.render_widget(line_number_p, line_number_area);
+            }
         }
-
-        let y_cursor = if window.display_y_pos() >= area.bottom() {
-            area.bottom() - 3
-        } else {
-            window.display_y_pos()
-        };
-
-        let x_cursor = if window.display_x_pos() >= area.right() {
-            area.right() - 1
-        } else {
-            window.display_x_pos()
-        };
-
-        if let Some(line_numbers_cached) = line_numbers.get(&window.buffer_id) {
-            let line_number_p = Paragraph::new(line_numbers_cached.clone())
-                .alignment(Alignment::Left)
-                .wrap(Wrap { trim: false })
-                .scroll((window.current_page, window.x_pos));
-            f.render_widget(line_number_p, line_number_area);
-        }
-
-        f.set_cursor(x_cursor, y_cursor);
     }
 
     fn draw_footer<B>(&self, window: Option<&Window>, f: &mut Frame<B>, area: Rect)
@@ -309,11 +331,14 @@ impl<'a> Ui<'a> {
                     page_size: change.page_size,
                     current_page: change.current_page,
                     y_offset: self.text_area.top(),
-                    x_offset: 4,
+                    x_offset: self.windows.values().nth(0).map(|w| w.x_pos).unwrap_or_default() + 4,
                     ..Window::default()
                 };
                 self.windows.insert(change.id, window);
                 self.current_window_id = change.id;
+            },
+            DisplayToken::SetTextLayout(direction) => {
+                self.set_text_layout(direction);
             }
             DisplayToken::UpdateWindow(change) => {
                 if let Some(window) = self.windows.get_mut(&change.id) {
@@ -342,7 +367,7 @@ impl<'a> Ui<'a> {
                 self.remove_cache_line(id, line_index).await;
                 self.cache_line_numbers(&text, id).await;
             }
-            DisplayToken::DrawWindow(window_id) => {
+            DisplayToken::DrawWindow(_window_id) => {
                 unimplemented!()
             }
             DisplayToken::AppendCommand(id, command) => {
@@ -358,7 +383,7 @@ impl<'a> Ui<'a> {
 
     async fn handle_command_token(
         &mut self,
-        terminal: &mut Term,
+        _terminal: &mut Term,
         token: CommandToken,
     ) -> AnyHowResult<Vec<Token>> {
         let _ = match token {
@@ -410,7 +435,7 @@ impl<'a> Ui<'a> {
         Ok(ui)
     }
 
-    pub async fn receive_tokens(rx: Receiver<Token>, tx: Sender<Token>) -> AnyHowResult<()> {
+    pub async fn receive_tokens(rx: Receiver<Token>, _tx: Sender<Token>) -> AnyHowResult<()> {
         let stdout = stdout().into_raw_mode()?;
         let stdout = MouseTerminal::from(stdout);
         let stdout = AlternateScreen::from(stdout);
