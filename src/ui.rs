@@ -1,5 +1,5 @@
 use crate::token::{
-    display_token::DisplayToken,CommandToken,Token,
+    display_token::DisplayToken,CommandToken,Token,NormalToken
 };
 use crate::Window;
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
@@ -76,7 +76,7 @@ impl<'a> Ui<'a> {
         )
     }
 
-    pub fn set_text_layout(&mut self,direction: Direction) {
+    pub fn add_text_split(&mut self,direction: Direction) {
         let text_area = if let Some(area) = self.windows.get(&self.current_window_id).and_then(|w| w.area) {
             area
         } else {
@@ -99,10 +99,19 @@ impl<'a> Ui<'a> {
             
         for (window_id,split) in sorted_windows.into_iter().map(|w| w.id).zip(text_splits) {
             if let Some(window) = self.windows.get_mut(&window_id) {
+                window.outer_areas.push(window.area);
                 window.area = Some(split);
                 window.bottom = Some(split.bottom());
                 window.right = Some(split.right());
             }
+        }
+    }
+
+    pub fn remove_text_split(&mut self,window_id: Uuid) {
+        if let Some(window) = self.windows.get_mut(&window_id) {
+            window.area = window.outer_areas.pop().flatten();
+            window.bottom = window.area.map(|a| a.bottom());
+             window.right = window.area.map(|a| a.right());
         }
     }
 
@@ -338,7 +347,7 @@ impl<'a> Ui<'a> {
                 self.current_window_id = change.id;
             },
             DisplayToken::SetTextLayout(direction) => {
-                self.set_text_layout(direction);
+                self.add_text_split(direction);
             }
             DisplayToken::UpdateWindow(change) => {
                 if let Some(window) = self.windows.get_mut(&change.id) {
@@ -355,6 +364,16 @@ impl<'a> Ui<'a> {
             DisplayToken::CacheWindowContent(id, text) => {
                 self.cache_formatted_text(&text, id).await;
                 self.cache_line_numbers(&text, id).await;
+            }
+            DisplayToken::CloseWindow(id) => {
+                log::info!("closing window {}", id);
+                self.windows.remove(&id);
+                self.highlight_cache.remove(&id);
+                self.line_num_cache.remove(&id);
+                if let Some(window_id) = self.windows.keys().nth(0) {
+                    self.current_window_id = *window_id;
+                    self.remove_text_split(*window_id);
+                }
             }
             DisplayToken::CacheCurrentLine(id, text, line_index) => {
                 self.cache_current_line(&text, id, line_index).await;
@@ -396,6 +415,29 @@ impl<'a> Ui<'a> {
         Ok(vec![])
     }
 
+    async fn handle_normal_token(
+        &mut self,
+        _terminal: &mut Term,
+        token: NormalToken,
+    ) -> AnyHowResult<Vec<Token>> {
+        let _ = match token {
+            NormalToken::WindowLeft => {
+                Ok(())
+            },
+            NormalToken::WindowRight => {
+                Ok(())
+            },
+            NormalToken::WindowUp => {
+                Ok(())
+            },
+            NormalToken::WindowDown => {
+                Ok(())
+            },
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+        };
+        Ok(vec![])
+    }
+
     pub async fn handle_token(
         &mut self,
         terminal: &mut Term,
@@ -404,13 +446,7 @@ impl<'a> Ui<'a> {
         let _ = match token {
             Token::Display(t) => self.handle_display_token(terminal, t).await,
             Token::Command(t) => self.handle_command_token(terminal, t).await,
-            /*
-            Token::Append(t) => self.handle_append_token(t),
-            Token::Insert(t) => self.handle_insert_token(t),
-            Token::Normal(t) => self.handle_normal_token(t),
-            Token::Operator(t) => self.handle_operator_token(t),
-            Token::Range(t) => self.handle_range_token(t),
-            */
+            Token::Normal(t) => self.handle_normal_token(terminal,t).await,
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
         };
         Ok(vec![])

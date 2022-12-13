@@ -13,7 +13,6 @@ use uuid::Uuid;
 
 pub struct Buffer {
     pub id: Uuid,
-    pub should_quit: bool,
     pub past_states: Vec<Rope>,
     pub future_states: Vec<Rope>,
     pub file_path: Option<String>,
@@ -296,7 +295,6 @@ impl Buffer {
                 Ok(Self {
                     id: Uuid::new_v4(),
                     title: file_path.clone(),
-                    should_quit: false,
                     clipboard: Clipboard::new().unwrap(),
                     mode: Mode::Normal,
                     start_select_pos: None,
@@ -316,7 +314,6 @@ impl Buffer {
             None => Ok(Self {
                 id: Uuid::new_v4(),
                 title: "Ri".to_string(),
-                should_quit: false,
                 clipboard: Clipboard::new().unwrap(),
                 mode: Mode::Normal,
                 start_select_pos: None,
@@ -378,8 +375,10 @@ impl Buffer {
     pub fn handle_command_token(&mut self, token: CommandToken) -> AnyHowResult<Vec<Token>> {
         match token {
             CommandToken::Quit => {
-                self.should_quit = true;
-                Ok(vec![])
+                self.set_normal_mode();
+                Ok(vec![
+                    Token::Display(DisplayToken::CloseWindow(self.id)),
+                    Token::Display(DisplayToken::DrawViewPort)])
             }
             CommandToken::Write => {
                 let _ = self.on_save();
@@ -411,7 +410,12 @@ impl Buffer {
                     t.truncate(t.len() - 1);
                     t
                 });
-                Ok(vec![])
+                Ok(vec![
+                    Token::Display(DisplayToken::AppendCommand(
+                        self.id,
+                        self.command_text.clone(),
+                    )),
+                   Token::Display(DisplayToken::DrawViewPort)])
             }
             CommandToken::Enter => {
                 if let Some(command_text) = &self.command_text {

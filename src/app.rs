@@ -62,9 +62,16 @@ impl App {
     pub fn handle_command_token(&mut self, token: CommandToken) -> AnyHowResult<Vec<Token>> {
         match token {
             CommandToken::Quit => {
-                self.should_quit = true;
-                Ok(vec![])
-            },
+                let id = self.current_buffer_id;
+                self.buffers.remove(&id);
+                if let Some(buffer_id) = self.buffers.keys().nth(0) {
+                    self.current_buffer_id = *buffer_id;
+                }
+                if self.buffers.is_empty() {
+                    self.should_quit = true;
+                }
+                Ok(vec![Token::Command(CommandToken::Quit)])
+            }
             CommandToken::TabNew => Ok(vec![]),
             CommandToken::Split(f_name) => {
                 if let Some(file_name) = f_name {
@@ -150,12 +157,7 @@ impl App {
 
     pub fn handle_token(&mut self, token: Token) -> AnyHowResult<Vec<Token>> {
         match token {
-            //Token::Append(t) => self.handle_append_token(t),
             Token::Command(t) => self.handle_command_token(t),
-            //Token::Insert(t) => self.handle_insert_token(t),
-            //Token::Normal(t) => self.handle_normal_token(t),
-            //Token::Operator(t) => self.handle_operator_token(t),
-            //Token::Range(t) => self.handle_range_token(t),
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
         }
     }
@@ -208,33 +210,36 @@ impl App {
             if !app.should_quit {
                 let event = events.next()?;
                 let mut draw_events: Vec<Token> = vec![];
+                let mut app_events: Vec<Token> = vec![];
                 if let Ok(token) = get_token_from_key(&app.mode(), &event) {
                     token_str.truncate(0);
+                    app_events.push(token.clone());
                     draw_events.push(token.clone());
-                    let mut app_events = app.handle_token(token.clone()).unwrap_or_default();
-                    if !app_events.is_empty() {
-                        draw_events.append(&mut app_events);
-                    }
                     if let Some(buffer) = app.buffers.get_mut(&app.current_buffer_id) {
                         if let Ok(mut buff_events) = buffer.handle_token(token.clone()) {
                             draw_events.append(&mut buff_events);
+                            app_events.append(&mut buff_events);
                         }
                     }
                 } else if let Event::Input(Key::Char(c)) = event {
                     token_str.push_str(&c.to_string());
                     if let Ok(token) = get_token_from_str(&app.mode(), &token_str) {
+                        app_events.push(token.clone());
                         draw_events.push(token.clone());
-                        let mut app_events = app.handle_token(token.clone()).unwrap_or_default();
-                        if !app_events.is_empty() {
-                            draw_events.append(&mut app_events);
-                        }
                         if let Some(buffer) = app.buffers.get_mut(&app.current_buffer_id) {
                             if let Ok(mut buff_events) = buffer.handle_token(token.clone()) {
                                 draw_events.append(&mut buff_events);
+                                app_events.append(&mut buff_events);
                                 token_str.truncate(0);
                             }
                         }
                     }
+                }
+                
+                for token in app_events {
+                   if let Ok(mut events) = app.handle_token(token.clone()) {
+                    draw_events.append(&mut events);
+                   }
                 }
                 for draw_event in draw_events.iter() {
                     let _ = tx.send_async(draw_event.clone()).await;
@@ -242,7 +247,6 @@ impl App {
             }
 
             if app.should_quit {
-                let _ = tx.send_async(Token::Command(CommandToken::Quit)).await;
                 break;
             }
         }

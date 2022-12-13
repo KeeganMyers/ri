@@ -34,6 +34,7 @@ pub enum DisplayToken {
     CacheCurrentLine(Uuid, Rope, usize),
     CacheNewLine(Uuid, Rope, usize),
     RemoveCacheLine(Uuid, Rope, usize),
+    CloseWindow(Uuid)
 }
 
 pub const PARSE_FAILURE_ERR: &'static str = "Unknown Token";

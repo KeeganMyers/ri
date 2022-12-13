@@ -21,6 +21,7 @@ pub struct Window {
     pub mode: Mode,
     pub page_size: u16,
     pub current_page: u16,
+    pub outer_areas: Vec<Option<Rect>>,
     pub area: Option<Rect>,
     pub command_text: Option<String>,
     pub bottom: Option<u16>,
