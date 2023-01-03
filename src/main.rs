@@ -8,14 +8,13 @@ mod window;
 use crate::{
     app::{App, Mode},
     buffer::Buffer,
-    token::{get_token_from_key, get_token_from_str, Token},
+    token::Token,
     ui::Ui,
     window::Window,
 };
 
 use anyhow::Result as AnyhowResult;
 use argh::FromArgs;
-use flume::unbounded;
 use log::LevelFilter;
 use log4rs::{
     append::{
@@ -26,15 +25,7 @@ use log4rs::{
     encode::pattern::PatternEncoder,
     filter::threshold::ThresholdFilter,
 };
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::{error::Error, io, time::Duration};
-use termion::event::Key;
-use termion::{input::MouseTerminal, raw::IntoRawMode, screen::AlternateScreen};
-use tui::text::Spans;
-use tui::{backend::TermionBackend, Terminal};
-use util::event::{Config, Event, Events};
-use uuid::Uuid;
+use std::error::Error;
 extern crate log;
 
 #[derive(Debug, FromArgs)]
@@ -78,10 +69,14 @@ fn setup_logger() -> AnyhowResult<()> {
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli: Cli = argh::from_env();
     let _ = setup_logger();
-    let (tx, rx) = flume::unbounded::<Token>();
-    let ui_handler = async_std::task::spawn({ Ui::receive_tokens(rx.clone(), tx.clone()) });
-    let app_handler =
-        async_std::task::spawn({ App::receive_tokens(cli.file_name, rx.clone(), tx.clone()) });
+    let (app_tx, app_rx) = flume::unbounded::<Token>();
+    let (ui_tx, ui_rx) = flume::unbounded::<Token>();
+    let ui_handler = async_std::task::spawn(Ui::receive_tokens(app_rx.clone(), ui_tx.clone()));
+    let app_handler = async_std::task::spawn(App::receive_tokens(
+        cli.file_name,
+        ui_rx.clone(),
+        app_tx.clone(),
+    ));
     let _ = ui_handler.await;
     let _ = app_handler.await;
     Ok(())

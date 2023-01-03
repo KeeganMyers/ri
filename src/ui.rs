@@ -1,6 +1,4 @@
-use crate::token::{
-    display_token::DisplayToken,CommandToken,Token,NormalToken
-};
+use crate::token::{display_token::DisplayToken, CommandToken, NormalToken, Token};
 use crate::Window;
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use flume::{Receiver, Sender};
@@ -47,12 +45,11 @@ pub struct Ui<'a> {
 
 impl<'a> Ui<'a> {
     pub fn convert_style(style: SyntectStyle) -> Style {
-        Style::default()
-            .fg(Color::Rgb(
-                style.foreground.r,
-                style.foreground.g,
-                style.foreground.b,
-            ))
+        Style::default().fg(Color::Rgb(
+            style.foreground.r,
+            style.foreground.g,
+            style.foreground.b,
+        ))
     }
 
     pub fn to_span(style: SyntectStyle, value: &str) -> Span {
@@ -76,8 +73,12 @@ impl<'a> Ui<'a> {
         )
     }
 
-    pub fn add_text_split(&mut self,direction: Direction) {
-        let text_area = if let Some(area) = self.windows.get(&self.current_window_id).and_then(|w| w.area) {
+    pub fn add_text_split(&mut self, direction: Direction) {
+        let text_area = if let Some(area) = self
+            .windows
+            .get(&self.current_window_id)
+            .and_then(|w| w.area)
+        {
             area
         } else {
             self.text_area
@@ -92,12 +93,14 @@ impl<'a> Ui<'a> {
                     .as_ref(),
             )
             .split(text_area);
-        let mut sorted_windows = self.windows.values().map(|w| w.clone()).collect::<Vec<Window>>();
-        sorted_windows.sort_by(|w_a,w_b| w_a.get_origin().cmp(
-        &w_b.get_origin())
-            );
-            
-        for (window_id,split) in sorted_windows.into_iter().map(|w| w.id).zip(text_splits) {
+        let mut sorted_windows = self
+            .windows
+            .values()
+            .map(|w| w.clone())
+            .collect::<Vec<Window>>();
+        sorted_windows.sort_by(|w_a, w_b| w_a.get_origin().cmp(&w_b.get_origin()));
+
+        for (window_id, split) in sorted_windows.into_iter().map(|w| w.id).zip(text_splits) {
             if let Some(window) = self.windows.get_mut(&window_id) {
                 window.outer_areas.push(window.area);
                 window.area = Some(split);
@@ -107,11 +110,11 @@ impl<'a> Ui<'a> {
         }
     }
 
-    pub fn remove_text_split(&mut self,window_id: Uuid) {
+    pub fn remove_text_split(&mut self, window_id: Uuid) {
         if let Some(window) = self.windows.get_mut(&window_id) {
             window.area = window.outer_areas.pop().flatten();
             window.bottom = window.area.map(|a| a.bottom());
-             window.right = window.area.map(|a| a.right());
+            window.right = window.area.map(|a| a.right());
         }
     }
 
@@ -123,12 +126,7 @@ impl<'a> Ui<'a> {
             self.head_area,
         );
         for window in self.windows.values() {
-            Self::draw_text(
-                f,
-                &self.highlight_cache,
-                &self.line_num_cache,
-                window,
-            );
+            Self::draw_text(f, &self.highlight_cache, &self.line_num_cache, window);
 
             if window.id == self.current_window_id {
                 let y_cursor = if window.display_y_pos() >= window.bottom.unwrap_or_default() {
@@ -254,7 +252,6 @@ impl<'a> Ui<'a> {
                 f.render_widget(paragraph, text_area);
             }
 
-
             if let Some(line_numbers_cached) = line_numbers.get(&window.buffer_id) {
                 let line_number_p = Paragraph::new(line_numbers_cached.clone())
                     .alignment(Alignment::Left)
@@ -329,8 +326,8 @@ impl<'a> Ui<'a> {
                 }
                 self.theme = Some(theme);
             }
-            DisplayToken::NewVerticalWindow(change) => {
-                let window = Window {
+            DisplayToken::NewWindow(change, direction) => {
+                let mut window = Window {
                     id: change.id,
                     buffer_id: change.id,
                     x_pos: change.x_pos,
@@ -340,16 +337,55 @@ impl<'a> Ui<'a> {
                     page_size: change.page_size,
                     current_page: change.current_page,
                     y_offset: self.text_area.top(),
-                    x_offset: self.windows.values().nth(0).map(|w| w.x_pos).unwrap_or_default() + 4,
+                    x_offset: self
+                        .windows
+                        .values()
+                        .nth(0)
+                        .map(|w| w.x_pos)
+                        .unwrap_or_default()
+                        + 4,
                     ..Window::default()
                 };
+
+                match direction {
+                    Some(Direction::Horizontal) => {
+                        window.window_right = Some(self.current_window_id);
+                        if let Some(current_window) = self.windows.get_mut(&self.current_window_id)
+                        {
+                            current_window.window_left = Some(window.id);
+                        }
+                    }
+                    Some(Direction::Vertical) => {
+                        window.window_down = Some(self.current_window_id);
+                        if let Some(current_window) = self.windows.get_mut(&self.current_window_id)
+                        {
+                            current_window.window_up = Some(window.id);
+                        }
+                    }
+                    None => (),
+                }
+
                 self.windows.insert(change.id, window);
                 self.current_window_id = change.id;
-            },
+            }
             DisplayToken::SetTextLayout(direction) => {
                 self.add_text_split(direction);
             }
             DisplayToken::UpdateWindow(change) => {
+                let right_offset = self
+                    .windows
+                    .get(&change.id)
+                    .and_then(|w| w.window_left)
+                    .and_then(|w| self.windows.get(&w))
+                    .and_then(|w| w.right)
+                    .unwrap_or_default();
+                let top_offset = self
+                    .windows
+                    .get(&change.id)
+                    .and_then(|w| w.window_up)
+                    .and_then(|w| self.windows.get(&w))
+                    .and_then(|w| w.bottom)
+                    .unwrap_or(self.text_area.top());
                 if let Some(window) = self.windows.get_mut(&change.id) {
                     window.x_pos = change.x_pos;
                     window.y_pos = change.y_pos;
@@ -357,8 +393,8 @@ impl<'a> Ui<'a> {
                     window.title = change.title.unwrap_or_default();
                     window.page_size = change.page_size;
                     window.current_page = change.current_page;
-                    window.y_offset = self.text_area.top();
-                    window.x_offset = 4;
+                    window.y_offset = top_offset;
+                    window.x_offset = 4 + right_offset;
                 }
             }
             DisplayToken::CacheWindowContent(id, text) => {
@@ -366,7 +402,6 @@ impl<'a> Ui<'a> {
                 self.cache_line_numbers(&text, id).await;
             }
             DisplayToken::CloseWindow(id) => {
-                log::info!("closing window {}", id);
                 self.windows.remove(&id);
                 self.highlight_cache.remove(&id);
                 self.line_num_cache.remove(&id);
@@ -417,25 +452,74 @@ impl<'a> Ui<'a> {
 
     async fn handle_normal_token(
         &mut self,
-        _terminal: &mut Term,
+        terminal: &mut Term,
         token: NormalToken,
     ) -> AnyHowResult<Vec<Token>> {
-        let _ = match token {
+        match token {
             NormalToken::WindowLeft => {
-                Ok(())
-            },
+                if let Some(window_id) = self
+                    .windows
+                    .get(&self.current_window_id)
+                    .and_then(|w| w.window_left)
+                {
+                    if let Some(target_window) = self.windows.get(&window_id) {
+                        self.current_window_id = window_id;
+                        let _ = terminal.draw(|f| self.draw(f));
+                        return Ok(vec![Token::Command(CommandToken::SetBuffer(
+                            target_window.buffer_id,
+                        ))]);
+                    }
+                }
+                Ok(vec![])
+            }
             NormalToken::WindowRight => {
-                Ok(())
-            },
+                if let Some(window_id) = self
+                    .windows
+                    .get(&self.current_window_id)
+                    .and_then(|w| w.window_right)
+                {
+                    if let Some(target_window) = self.windows.get(&window_id) {
+                        self.current_window_id = window_id;
+                        let _ = terminal.draw(|f| self.draw(f));
+                        return Ok(vec![Token::Command(CommandToken::SetBuffer(
+                            target_window.buffer_id,
+                        ))]);
+                    }
+                }
+                Ok(vec![])
+            }
             NormalToken::WindowUp => {
-                Ok(())
-            },
+                if let Some(window_id) = self
+                    .windows
+                    .get(&self.current_window_id)
+                    .and_then(|w| w.window_up)
+                {
+                    if let Some(target_window) = self.windows.get(&window_id) {
+                        self.current_window_id = window_id;
+                        return Ok(vec![Token::Command(CommandToken::SetBuffer(
+                            target_window.buffer_id,
+                        ))]);
+                    }
+                }
+                Ok(vec![])
+            }
             NormalToken::WindowDown => {
-                Ok(())
-            },
+                if let Some(window_id) = self
+                    .windows
+                    .get(&self.current_window_id)
+                    .and_then(|w| w.window_down)
+                {
+                    if let Some(target_window) = self.windows.get(&window_id) {
+                        self.current_window_id = window_id;
+                        return Ok(vec![Token::Command(CommandToken::SetBuffer(
+                            target_window.buffer_id,
+                        ))]);
+                    }
+                }
+                Ok(vec![])
+            }
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
-        };
-        Ok(vec![])
+        }
     }
 
     pub async fn handle_token(
@@ -443,13 +527,12 @@ impl<'a> Ui<'a> {
         terminal: &mut Term,
         token: Token,
     ) -> AnyHowResult<Vec<Token>> {
-        let _ = match token {
+        match token {
             Token::Display(t) => self.handle_display_token(terminal, t).await,
             Token::Command(t) => self.handle_command_token(terminal, t).await,
-            Token::Normal(t) => self.handle_normal_token(terminal,t).await,
+            Token::Normal(t) => self.handle_normal_token(terminal, t).await,
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
-        };
-        Ok(vec![])
+        }
     }
 
     pub fn new(terminal: &mut Term) -> AnyHowResult<Self> {
@@ -471,7 +554,7 @@ impl<'a> Ui<'a> {
         Ok(ui)
     }
 
-    pub async fn receive_tokens(rx: Receiver<Token>, _tx: Sender<Token>) -> AnyHowResult<()> {
+    pub async fn receive_tokens(rx: Receiver<Token>, tx: Sender<Token>) -> AnyHowResult<()> {
         let stdout = stdout().into_raw_mode()?;
         let stdout = MouseTerminal::from(stdout);
         let stdout = AlternateScreen::from(stdout);
@@ -480,7 +563,13 @@ impl<'a> Ui<'a> {
         let mut ui = Self::new(&mut terminal)?;
         while !ui.should_quit {
             if let Ok(token) = rx.recv_async().await {
-                let _ = ui.handle_token(&mut terminal, token).await;
+                if let Ok(tokens) = ui.handle_token(&mut terminal, token).await {
+                    for token in tokens {
+                        let _ = tx.send_async(token.clone()).await;
+                    }
+                } else {
+                    ()
+                }
             }
         }
         Ok(())

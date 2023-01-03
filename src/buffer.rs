@@ -346,7 +346,7 @@ impl Buffer {
                     self.x_pos = 0;
                 }
                 Ok(())
-            },
+            }
             AppendToken::Append(chars) => {
                 self.past_states.push(self.text.clone());
                 self.future_states = vec![];
@@ -357,16 +357,16 @@ impl Buffer {
                     self.x_pos += chars.len() as u16;
                 }
                 Ok(())
-            },
+            }
             AppendToken::Remove => {
                 self.remove_char();
                 Ok(())
-            },
+            }
             AppendToken::Esc => {
                 self.start_select_pos = None;
                 self.set_normal_mode();
                 Ok(())
-            },
+            }
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
         };
         Ok(vec![])
@@ -378,7 +378,8 @@ impl Buffer {
                 self.set_normal_mode();
                 Ok(vec![
                     Token::Display(DisplayToken::CloseWindow(self.id)),
-                    Token::Display(DisplayToken::DrawViewPort)])
+                    Token::Display(DisplayToken::DrawViewPort),
+                ])
             }
             CommandToken::Write => {
                 let _ = self.on_save();
@@ -387,7 +388,7 @@ impl Buffer {
             CommandToken::VerticalSplit(_) => {
                 self.set_normal_mode();
                 Ok(vec![])
-            },
+            }
             CommandToken::Esc => {
                 self.set_normal_mode();
                 Ok(vec![Token::Display(DisplayToken::DrawViewPort)])
@@ -415,7 +416,8 @@ impl Buffer {
                         self.id,
                         self.command_text.clone(),
                     )),
-                   Token::Display(DisplayToken::DrawViewPort)])
+                    Token::Display(DisplayToken::DrawViewPort),
+                ])
             }
             CommandToken::Enter => {
                 if let Some(command_text) = &self.command_text {
@@ -480,7 +482,7 @@ impl Buffer {
                     })),
                     Token::Display(DisplayToken::DrawViewPort),
                 ])
-            },
+            }
             InsertToken::Append(chars) => {
                 self.past_states.push(self.text.clone());
                 self.future_states = vec![];
@@ -489,16 +491,16 @@ impl Buffer {
                     self.x_pos += chars.len() as u16;
                 }
                 self.standard_insert_response()
-            },
+            }
             InsertToken::Remove => {
                 self.remove_char();
                 self.standard_insert_response()
-            },
+            }
             InsertToken::Esc => {
                 self.start_select_pos = None;
                 self.set_normal_mode();
                 self.standard_normal_response()
-            },
+            }
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
         }
     }
@@ -738,12 +740,6 @@ impl Buffer {
                 Ok(vec![])
             }
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
-        }
-    }
-
-    pub async fn receive_tokens(&mut self, rx: Receiver<Token>, _tx: Sender<Token>) {
-        while let Ok(token) = rx.recv_async().await {
-            let _ = self.handle_token(token);
         }
     }
 }

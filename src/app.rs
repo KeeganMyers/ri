@@ -1,17 +1,17 @@
+use crate::util::event::{Config, Event, Events};
 use crate::{
     token::{
         display_token::{DisplayToken, WindowChange},
         get_token_from_key, get_token_from_str, CommandToken, Token,
     },
-    Buffer
+    Buffer,
 };
-use tui::layout::Direction;
-use crate::util::event::{Config, Event, Events};
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use flume::{Receiver, Sender};
 use std::collections::HashMap;
 use std::time::Duration;
 use termion::event::Key;
+use tui::layout::Direction;
 use uuid::Uuid;
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -75,66 +75,72 @@ impl App {
             CommandToken::TabNew => Ok(vec![]),
             CommandToken::Split(f_name) => {
                 if let Some(file_name) = f_name {
-                    let buffer = if let Ok(buffer) = Buffer::new(Some(file_name.trim().to_string())) {
+                    let buffer = if let Ok(buffer) = Buffer::new(Some(file_name.trim().to_string()))
+                    {
                         buffer
                     } else {
                         Buffer::new(None).unwrap()
                     };
-                let response = Ok(vec![Token::Display(DisplayToken::NewVerticalWindow(
-                    WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    },
-                )),
-                Token::Display(DisplayToken::SetTextLayout(Direction::Vertical)),
-                Token::Display(DisplayToken::CacheWindowContent(
-                    buffer.id,
-                    buffer.text.clone(),
-                )),
-                Token::Display(DisplayToken::DrawViewPort)
-                ]);
+                    let response = Ok(vec![
+                        Token::Display(DisplayToken::NewWindow(
+                            WindowChange {
+                                id: buffer.id,
+                                x_pos: buffer.x_pos,
+                                y_pos: buffer.y_pos,
+                                mode: buffer.mode.clone(),
+                                title: Some(buffer.title.clone()),
+                                page_size: buffer.page_size,
+                                current_page: buffer.current_page,
+                                ..WindowChange::default()
+                            },
+                            Some(Direction::Vertical),
+                        )),
+                        Token::Display(DisplayToken::SetTextLayout(Direction::Vertical)),
+                        Token::Display(DisplayToken::CacheWindowContent(
+                            buffer.id,
+                            buffer.text.clone(),
+                        )),
+                        Token::Display(DisplayToken::DrawViewPort),
+                    ]);
                     self.current_buffer_id = buffer.id;
                     self.buffers.insert(buffer.id, buffer);
-                response
+                    response
                 } else {
                     Ok(vec![])
                 }
             }
             CommandToken::VerticalSplit(f_name) => {
                 if let Some(file_name) = f_name {
-                    let buffer = if let Ok(buffer) = Buffer::new(Some(file_name.trim().to_string())) {
+                    let buffer = if let Ok(buffer) = Buffer::new(Some(file_name.trim().to_string()))
+                    {
                         buffer
                     } else {
                         Buffer::new(None).unwrap()
                     };
-                let response = Ok(vec![Token::Display(DisplayToken::NewVerticalWindow(
-                    WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    },
-                )),
-                Token::Display(DisplayToken::SetTextLayout(Direction::Horizontal)),
-                Token::Display(DisplayToken::CacheWindowContent(
-                    buffer.id,
-                    buffer.text.clone(),
-                )),
-                Token::Display(DisplayToken::DrawViewPort)
-                ]);
+                    let response = Ok(vec![
+                        Token::Display(DisplayToken::NewWindow(
+                            WindowChange {
+                                id: buffer.id,
+                                x_pos: buffer.x_pos,
+                                y_pos: buffer.y_pos,
+                                mode: buffer.mode.clone(),
+                                title: Some(buffer.title.clone()),
+                                page_size: buffer.page_size,
+                                current_page: buffer.current_page,
+                                ..WindowChange::default()
+                            },
+                            Some(Direction::Horizontal),
+                        )),
+                        Token::Display(DisplayToken::SetTextLayout(Direction::Horizontal)),
+                        Token::Display(DisplayToken::CacheWindowContent(
+                            buffer.id,
+                            buffer.text.clone(),
+                        )),
+                        Token::Display(DisplayToken::DrawViewPort),
+                    ]);
                     self.current_buffer_id = buffer.id;
                     self.buffers.insert(buffer.id, buffer);
-                response
+                    response
                 } else {
                     Ok(vec![])
                 }
@@ -151,6 +157,12 @@ impl App {
                 }
                 Ok(vec![])
             }
+            CommandToken::SetBuffer(id) => {
+                if let Some(_buffer) = self.buffers.get(&id) {
+                    self.current_buffer_id = id;
+                }
+                Ok(vec![])
+            }
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
         }
     }
@@ -164,7 +176,7 @@ impl App {
 
     pub async fn receive_tokens(
         file_name: Option<String>,
-        _rx: Receiver<Token>,
+        rx: Receiver<Token>,
         tx: Sender<Token>,
     ) -> AnyHowResult<()> {
         let config = Config {
@@ -180,7 +192,7 @@ impl App {
             .await;
         if let Some(buffer) = app.buffers.get(&app.current_buffer_id) {
             let _ = tx
-                .send_async(Token::Display(DisplayToken::NewVerticalWindow(
+                .send_async(Token::Display(DisplayToken::NewWindow(
                     WindowChange {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
@@ -191,10 +203,13 @@ impl App {
                         current_page: buffer.current_page,
                         ..WindowChange::default()
                     },
+                    None,
                 )))
                 .await;
             let _ = tx
-                .send_async(Token::Display(DisplayToken::SetTextLayout(Direction::Horizontal)))
+                .send_async(Token::Display(DisplayToken::SetTextLayout(
+                    Direction::Horizontal,
+                )))
                 .await;
             let _ = tx
                 .send_async(Token::Display(DisplayToken::CacheWindowContent(
@@ -226,23 +241,26 @@ impl App {
                     if let Ok(token) = get_token_from_str(&app.mode(), &token_str) {
                         app_events.push(token.clone());
                         draw_events.push(token.clone());
+                        token_str.truncate(0);
                         if let Some(buffer) = app.buffers.get_mut(&app.current_buffer_id) {
                             if let Ok(mut buff_events) = buffer.handle_token(token.clone()) {
                                 draw_events.append(&mut buff_events);
                                 app_events.append(&mut buff_events);
-                                token_str.truncate(0);
                             }
                         }
                     }
                 }
-                
+
                 for token in app_events {
-                   if let Ok(mut events) = app.handle_token(token.clone()) {
-                    draw_events.append(&mut events);
-                   }
+                    if let Ok(mut events) = app.handle_token(token.clone()) {
+                        draw_events.append(&mut events);
+                    }
                 }
                 for draw_event in draw_events.iter() {
                     let _ = tx.send_async(draw_event.clone()).await;
+                }
+                if let Ok(token) = rx.recv_timeout(Duration::from_millis(1)) {
+                    let _ = app.handle_token(token);
                 }
             }
 

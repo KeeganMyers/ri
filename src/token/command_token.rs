@@ -2,6 +2,7 @@ use crate::util::event::Event;
 use anyhow::Error as AnyHowError;
 use std::{convert::TryFrom, iter::Iterator};
 use termion::event::Key;
+use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CommandToken {
@@ -15,6 +16,7 @@ pub enum CommandToken {
     Tab,
     Esc,
     Enter,
+    SetBuffer(Uuid),
 }
 
 pub const PARSE_FAILURE_ERR: &'static str = "Unknown Token";

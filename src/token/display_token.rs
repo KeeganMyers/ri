@@ -4,8 +4,8 @@ use anyhow::Error as AnyHowError;
 use ropey::Rope;
 use std::{convert::TryFrom, iter::Iterator};
 use termion::event::Key;
-use uuid::Uuid;
 use tui::layout::Direction;
+use uuid::Uuid;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WindowChange {
@@ -23,8 +23,7 @@ pub struct WindowChange {
 pub enum DisplayToken {
     SetHighlight,
     UpdateWindow(WindowChange),
-    NewVerticalWindow(WindowChange),
-    NewHorizontalWindow(WindowChange),
+    NewWindow(WindowChange, Option<Direction>),
     DropWindow(Uuid),
     DrawViewPort,
     SetTextLayout(Direction),
@@ -34,7 +33,7 @@ pub enum DisplayToken {
     CacheCurrentLine(Uuid, Rope, usize),
     CacheNewLine(Uuid, Rope, usize),
     RemoveCacheLine(Uuid, Rope, usize),
-    CloseWindow(Uuid)
+    CloseWindow(Uuid),
 }
 
 pub const PARSE_FAILURE_ERR: &'static str = "Unknown Token";
