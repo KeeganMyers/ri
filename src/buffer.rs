@@ -385,6 +385,10 @@ impl Buffer {
                 let _ = self.on_save();
                 Ok(vec![Token::Display(DisplayToken::DrawViewPort)])
             }
+            CommandToken::Split(_) => {
+                self.set_normal_mode();
+                Ok(vec![])
+            }
             CommandToken::VerticalSplit(_) => {
                 self.set_normal_mode();
                 Ok(vec![])

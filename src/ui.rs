@@ -327,6 +327,20 @@ impl<'a> Ui<'a> {
                 self.theme = Some(theme);
             }
             DisplayToken::NewWindow(change, direction) => {
+                let right_offset = self
+                    .windows
+                    .get(&change.id)
+                    .and_then(|w| w.window_left)
+                    .and_then(|w| self.windows.get(&w))
+                    .and_then(|w| w.right)
+                    .unwrap_or_default();
+                let top_offset = self
+                    .windows
+                    .get(&change.id)
+                    .and_then(|w| w.window_up)
+                    .and_then(|w| self.windows.get(&w))
+                    .and_then(|w| w.bottom)
+                    .unwrap_or(self.text_area.top());
                 let mut window = Window {
                     id: change.id,
                     buffer_id: change.id,
@@ -336,14 +350,8 @@ impl<'a> Ui<'a> {
                     title: change.title.unwrap_or_default(),
                     page_size: change.page_size,
                     current_page: change.current_page,
-                    y_offset: self.text_area.top(),
-                    x_offset: self
-                        .windows
-                        .values()
-                        .nth(0)
-                        .map(|w| w.x_pos)
-                        .unwrap_or_default()
-                        + 4,
+                    y_offset: top_offset,
+                    x_offset: right_offset + 4,
                     ..Window::default()
                 };
 
