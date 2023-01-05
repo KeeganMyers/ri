@@ -410,12 +410,59 @@ impl<'a> Ui<'a> {
                 self.cache_line_numbers(&text, id).await;
             }
             DisplayToken::CloseWindow(id) => {
-                self.windows.remove(&id);
-                self.highlight_cache.remove(&id);
-                self.line_num_cache.remove(&id);
-                if let Some(window_id) = self.windows.keys().nth(0) {
-                    self.current_window_id = *window_id;
-                    self.remove_text_split(*window_id);
+                let current_windows = self.windows.clone();
+                let current_window = current_windows.get(&id);
+                if let Some(current_window) = current_window {
+                    self.windows.remove(&id);
+                    self.highlight_cache.remove(&id);
+                    self.line_num_cache.remove(&id);
+                    match current_window.clone() {
+                        Window {
+                            window_right: Some(window_right),
+                            window_left,
+                            ..
+                        } => {
+                            self.current_window_id = window_right;
+                            self.windows
+                                .get_mut(&window_right)
+                                .map(|w| w.window_left = window_left);
+                            self.remove_text_split(window_right);
+                        }
+                        Window {
+                            window_left: Some(window_left),
+                            window_right,
+                            ..
+                        } => {
+                            self.current_window_id = window_left;
+                            self.windows
+                                .get_mut(&window_left)
+                                .map(|w| w.window_right = window_right);
+                            self.remove_text_split(window_left);
+                        }
+                        Window {
+                            window_up: Some(window_up),
+                            window_down,
+                            ..
+                        } => {
+                            self.current_window_id = window_up;
+                            self.windows
+                                .get_mut(&window_up)
+                                .map(|w| w.window_down = window_down);
+                            self.remove_text_split(window_up);
+                        }
+                        Window {
+                            window_down: Some(window_down),
+                            window_up,
+                            ..
+                        } => {
+                            self.current_window_id = window_down;
+                            self.windows
+                                .get_mut(&window_down)
+                                .map(|w| w.window_up = window_up);
+                            self.remove_text_split(window_down);
+                        }
+                        _ => (),
+                    }
                 }
             }
             DisplayToken::CacheCurrentLine(id, text, line_index) => {
