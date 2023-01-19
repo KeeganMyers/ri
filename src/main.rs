@@ -4,6 +4,7 @@ pub mod token;
 mod ui;
 mod util;
 mod window;
+mod parser;
 
 use crate::{
     app::{App, Mode},

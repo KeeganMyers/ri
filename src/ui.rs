@@ -1,6 +1,6 @@
-use crate::token::{display_token::DisplayToken, CommandToken, NormalToken, Token};
+use crate::token::{display_token::*, command_token::*,normal_token::*, Token};
 use crate::Window;
-use anyhow::{Error as AnyHowError, Result as AnyHowResult};
+use anyhow::{Result as AnyHowResult};
 use flume::{Receiver, Sender};
 use ropey::Rope;
 use std::collections::HashMap;
@@ -17,6 +17,7 @@ use termion::{
     raw::{IntoRawMode, RawTerminal},
     screen::AlternateScreen,
 };
+use actix::prelude::*;
 
 use tui::{
     backend::{Backend, TermionBackend},
@@ -28,7 +29,7 @@ use tui::{
 };
 use uuid::Uuid;
 pub type Term = Terminal<TermionBackend<AlternateScreen<MouseTerminal<RawTerminal<Stdout>>>>>;
-pub struct Ui<'a> {
+pub struct Ui{
     pub should_quit: bool,
     pub windows: HashMap<Uuid, Window>,
     pub syntax_set: Option<SyntaxSet>,
@@ -39,11 +40,358 @@ pub struct Ui<'a> {
     pub head_area: Rect,
     pub text_area: Rect,
     pub foot_area: Rect,
-    pub highlight_cache: HashMap<Uuid, Vec<Spans<'a>>>,
-    pub line_num_cache: HashMap<Uuid, Spans<'a>>,
+    //pub highlight_cache: HashMap<Uuid, Vec<Spans<'a>>>,
+    //pub line_num_cache: HashMap<Uuid, Spans<'a>>,
 }
 
-impl<'a> Ui<'a> {
+
+impl Actor for Ui {
+    type Context = Context<Self>;
+}
+
+impl Handler<CacheWindowContent> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, _msg: CacheWindowContent, _ctx: &mut Context<Self>) {
+                unimplemented!();
+                //self.cache_formatted_text(&text, msg.id).await;
+                //self.cache_line_numbers(&text, msg.id).await;
+    }
+}
+
+impl Handler<WindowUp> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, _msg: WindowUp, _ctx: &mut Context<Self>) {
+                if let Some(window_id) = self
+                    .windows
+                    .get(&self.current_window_id)
+                    .and_then(|w| w.window_up)
+                {
+                    if let Some(_target_window) = self.windows.get(&window_id) {
+                        self.current_window_id = window_id;
+                        unimplemented!();
+                        /*
+                        return Ok(vec![Token::Command(CommandToken::SetBuffer(
+                            target_window.buffer_id,
+                        ))]);
+                        */
+                    }
+                }
+    }
+}
+
+
+impl Handler<WindowDown> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, _msg: WindowDown, _ctx: &mut Context<Self>) {
+                if let Some(window_id) = self
+                    .windows
+                    .get(&self.current_window_id)
+                    .and_then(|w| w.window_down)
+                {
+                    if let Some(_target_window) = self.windows.get(&window_id) {
+                        self.current_window_id = window_id;
+                        unimplemented!();
+                        /*
+                        return Ok(vec![Token::Command(CommandToken::SetBuffer(
+                            target_window.buffer_id,
+                        ))]);
+                        */
+                    }
+                }
+    }
+}
+
+
+impl Handler<WindowLeft> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, _msg: WindowLeft, _ctx: &mut Context<Self>) {
+                if let Some(window_id) = self
+                    .windows
+                    .get(&self.current_window_id)
+                    .and_then(|w| w.window_left)
+                {
+                    if let Some(_target_window) = self.windows.get(&window_id) {
+                        self.current_window_id = window_id;
+                        unimplemented!();
+                        /*
+                        let _ = terminal.draw(|f| self.draw(f));
+                        return Ok(vec![Token::Command(CommandToken::SetBuffer(
+                            target_window.buffer_id,
+                        ))]);
+                        */
+                    }
+                }
+    }
+}
+
+
+impl Handler<WindowRight> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, _msg: WindowRight, _ctx: &mut Context<Self>) {
+                if let Some(window_id) = self
+                    .windows
+                    .get(&self.current_window_id)
+                    .and_then(|w| w.window_right)
+                {
+                    if let Some(_target_window) = self.windows.get(&window_id) {
+                        self.current_window_id = window_id;
+                        unimplemented!();
+                        /*
+                        let _ = terminal.draw(|f| self.draw(f));
+                        return Ok(vec![Token::Command(CommandToken::SetBuffer(
+                            target_window.buffer_id,
+                        ))]);
+                        */
+                    }
+                }
+    }
+}
+
+impl Handler<Quit> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, _msg: Quit, _ctx: &mut Context<Self>) {
+                self.should_quit = true;
+    }
+}
+
+impl Handler<AppendCommand> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, msg: AppendCommand, _ctx: &mut Context<Self>) {
+                if let Some(window) = self.windows.get_mut(&msg.id) {
+                    window.command_text = msg.command.clone();
+                }
+    }
+}
+
+impl Handler<CacheNewLine> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, _msg: CacheNewLine, _ctx: &mut Context<Self>) {
+                unimplemented!();
+                //self.cache_new_line(&text, msg.id, msg.line_index).await;
+                //self.cache_line_numbers(&text, msg.id).await;
+    }
+}
+
+impl Handler<RemoveCacheLine> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, _msg: RemoveCacheLine, _ctx: &mut Context<Self>) {
+                unimplemented!();
+                //self.remove_cache_line(id, line_index).await;
+                //self.cache_line_numbers(&text, id).await;
+    }
+}
+
+
+impl Handler<CacheCurrentLine> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, _msg: CacheCurrentLine, _ctx: &mut Context<Self>) {
+                unimplemented!();
+                //self.cache_current_line(&text, msg.id, msg.line_index).await;
+    }
+}
+
+impl Handler<CloseWindow> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, msg: CloseWindow, _ctx: &mut Context<Self>) {
+                let id = msg.id;
+                let current_windows = self.windows.clone();
+                let current_window = current_windows.get(&id);
+                if let Some(current_window) = current_window {
+                    self.windows.remove(&id);
+                    unimplemented!();
+                    //self.highlight_cache.remove(&id);
+                    //self.line_num_cache.remove(&id);
+                    match current_window.clone() {
+                        Window {
+                            window_right: Some(window_right),
+                            window_left,
+                            ..
+                        } => {
+                            self.current_window_id = window_right;
+                            self.windows
+                                .get_mut(&window_right)
+                                .map(|w| w.window_left = window_left);
+                            self.remove_text_split(window_right);
+                        }
+                        Window {
+                            window_left: Some(window_left),
+                            window_right,
+                            ..
+                        } => {
+                            self.current_window_id = window_left;
+                            self.windows
+                                .get_mut(&window_left)
+                                .map(|w| w.window_right = window_right);
+                            self.remove_text_split(window_left);
+                        }
+                        Window {
+                            window_up: Some(window_up),
+                            window_down,
+                            ..
+                        } => {
+                            self.current_window_id = window_up;
+                            self.windows
+                                .get_mut(&window_up)
+                                .map(|w| w.window_down = window_down);
+                            self.remove_text_split(window_up);
+                        }
+                        Window {
+                            window_down: Some(window_down),
+                            window_up,
+                            ..
+                        } => {
+                            self.current_window_id = window_down;
+                            self.windows
+                                .get_mut(&window_down)
+                                .map(|w| w.window_up = window_up);
+                            self.remove_text_split(window_down);
+                        }
+                        _ => (),
+                    }
+                }
+    }
+}
+
+
+impl Handler<DrawViewPort> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, _msg: DrawViewPort, _ctx: &mut Context<Self>) {
+                unimplemented!();
+                //let _ = terminal.draw(|f| self.draw(f));
+    }
+}
+
+
+impl Handler<SetTextLayout> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, msg: SetTextLayout, _ctx: &mut Context<Self>) {
+                self.add_text_split(msg.direction);
+    }
+}
+
+
+
+impl Handler<SetHighlight> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, _msg: SetHighlight, _ctx: &mut Context<Self>) {
+                let ps = SyntaxSet::load_defaults_newlines();
+                let ts = ThemeSet::load_defaults();
+                let syntax = ps.find_syntax_by_extension("rs").clone();
+                let theme = ts.themes["base16-ocean.dark"].clone();
+                self.syntax_set = Some(ps.clone());
+                self.theme_set = Some(ts);
+                if let Some(s) = syntax {
+                    self.syntax = Some(s.clone());
+                }
+                self.theme = Some(theme);
+    }
+}
+
+
+impl Handler<NewWindow> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, msg: NewWindow, _ctx: &mut Context<Self>) {
+                let change = msg.change;
+                let direction = msg.direction;
+                let right_offset = self
+                    .windows
+                    .get(&change.id)
+                    .and_then(|w| w.window_left)
+                    .and_then(|w| self.windows.get(&w))
+                    .and_then(|w| w.right)
+                    .unwrap_or_default();
+                let top_offset = self
+                    .windows
+                    .get(&change.id)
+                    .and_then(|w| w.window_up)
+                    .and_then(|w| self.windows.get(&w))
+                    .and_then(|w| w.bottom)
+                    .unwrap_or(self.text_area.top());
+                let mut window = Window {
+                    id: change.id,
+                    buffer_id: change.id,
+                    x_pos: change.x_pos,
+                    y_pos: change.y_pos,
+                    mode: change.mode,
+                    title: change.title.unwrap_or_default(),
+                    page_size: change.page_size,
+                    current_page: change.current_page,
+                    y_offset: top_offset,
+                    x_offset: right_offset + 4,
+                    ..Window::default()
+                };
+
+                match direction {
+                    Some(Direction::Horizontal) => {
+                        window.window_right = Some(self.current_window_id);
+                        if let Some(current_window) = self.windows.get_mut(&self.current_window_id)
+                        {
+                            current_window.window_left = Some(window.id);
+                        }
+                    }
+                    Some(Direction::Vertical) => {
+                        window.window_down = Some(self.current_window_id);
+                        if let Some(current_window) = self.windows.get_mut(&self.current_window_id)
+                        {
+                            current_window.window_up = Some(window.id);
+                        }
+                    }
+                    None => (),
+                }
+
+                self.windows.insert(change.id, window);
+                self.current_window_id = change.id;
+    }
+}
+
+impl Handler<UpdateWindow> for Ui {
+    type Result = ();
+
+    fn handle(&mut self, msg: UpdateWindow, _ctx: &mut Context<Self>) {
+                let change = msg.change;
+                let right_offset = self
+                    .windows
+                    .get(&change.id)
+                    .and_then(|w| w.window_left)
+                    .and_then(|w| self.windows.get(&w))
+                    .and_then(|w| w.right)
+                    .unwrap_or_default();
+                let top_offset = self
+                    .windows
+                    .get(&change.id)
+                    .and_then(|w| w.window_up)
+                    .and_then(|w| self.windows.get(&w))
+                    .and_then(|w| w.bottom)
+                    .unwrap_or(self.text_area.top());
+                if let Some(window) = self.windows.get_mut(&change.id) {
+                    window.x_pos = change.x_pos;
+                    window.y_pos = change.y_pos;
+                    window.mode = change.mode;
+                    window.title = change.title.unwrap_or_default();
+                    window.page_size = change.page_size;
+                    window.current_page = change.current_page;
+                    window.y_offset = top_offset;
+                    window.x_offset = 4 + right_offset;
+                }
+    }
+}
+
+impl Ui {
     pub fn convert_style(style: SyntectStyle) -> Style {
         Style::default().fg(Color::Rgb(
             style.foreground.r,
@@ -126,6 +474,7 @@ impl<'a> Ui<'a> {
             self.head_area,
         );
         for window in self.windows.values() {
+            /*
             Self::draw_text(f, &self.highlight_cache, &self.line_num_cache, window);
 
             if window.id == self.current_window_id {
@@ -143,6 +492,8 @@ impl<'a> Ui<'a> {
 
                 f.set_cursor(x_cursor, y_cursor);
             }
+            */
+            unimplemented!()
         }
         Self::draw_footer(
             self,
@@ -177,7 +528,8 @@ impl<'a> Ui<'a> {
                     spans.push(Self::to_spans(hs.clone()));
                 }
             }
-            self.highlight_cache.insert(id, spans.clone());
+            unimplemented!();
+            //self.highlight_cache.insert(id, spans.clone());
         }
     }
 
@@ -190,11 +542,14 @@ impl<'a> Ui<'a> {
                 .unwrap_or_default();
             let mut text_line = LinesWithEndings::from(Box::leak(Box::new(rope_str)));
             if let Some(line) = &text_line.nth(0) {
+            unimplemented!();
+                /*
                 if let Ok(hs) = highlight.highlight_line(line, &self.syntax_set.clone().unwrap()) {
                     if let Some(cache) = self.highlight_cache.get_mut(&id) {
                         cache.insert(line_index, Self::to_spans(hs.clone()));
                     }
                 }
+                */
             }
         }
     }
@@ -209,24 +564,31 @@ impl<'a> Ui<'a> {
             let mut text_line = LinesWithEndings::from(Box::leak(Box::new(rope_str)));
             if let Some(line) = &text_line.nth(0) {
                 if let Ok(hs) = highlight.highlight_line(line, &self.syntax_set.clone().unwrap()) {
+                    unimplemented!();
+                    /*
                     if let Some(cache) = self.highlight_cache.get_mut(&id) {
                         cache[line_index] = Self::to_spans(hs.clone());
                     }
+                    */
                 }
             }
         }
     }
 
     async fn remove_cache_line(&mut self, id: Uuid, line_index: usize) {
+        unimplemented!();
+        /*
         if let Some(cache) = self.highlight_cache.get_mut(&id) {
             cache.remove(line_index);
         }
+        */
     }
 
     async fn cache_line_numbers(&mut self, text: &Rope, id: Uuid) {
         let line_count = text.len_lines();
         let local_line_nums = Self::line_number_spans(line_count);
-        self.line_num_cache.insert(id, local_line_nums.clone());
+        unimplemented!();
+        //self.line_num_cache.insert(id, local_line_nums.clone());
     }
 
     fn draw_text<B>(
@@ -305,291 +667,6 @@ impl<'a> Ui<'a> {
         f.render_widget(paragraph, area);
     }
 
-    async fn handle_display_token(
-        &mut self,
-        terminal: &mut Term,
-        token: DisplayToken,
-    ) -> AnyHowResult<Vec<Token>> {
-        match token {
-            DisplayToken::DrawViewPort => {
-                let _ = terminal.draw(|f| self.draw(f));
-            }
-            DisplayToken::SetHighlight => {
-                let ps = SyntaxSet::load_defaults_newlines();
-                let ts = ThemeSet::load_defaults();
-                let syntax = ps.find_syntax_by_extension("rs").clone();
-                let theme = ts.themes["base16-ocean.dark"].clone();
-                self.syntax_set = Some(ps.clone());
-                self.theme_set = Some(ts);
-                if let Some(s) = syntax {
-                    self.syntax = Some(s.clone());
-                }
-                self.theme = Some(theme);
-            }
-            DisplayToken::NewWindow(change, direction) => {
-                let right_offset = self
-                    .windows
-                    .get(&change.id)
-                    .and_then(|w| w.window_left)
-                    .and_then(|w| self.windows.get(&w))
-                    .and_then(|w| w.right)
-                    .unwrap_or_default();
-                let top_offset = self
-                    .windows
-                    .get(&change.id)
-                    .and_then(|w| w.window_up)
-                    .and_then(|w| self.windows.get(&w))
-                    .and_then(|w| w.bottom)
-                    .unwrap_or(self.text_area.top());
-                let mut window = Window {
-                    id: change.id,
-                    buffer_id: change.id,
-                    x_pos: change.x_pos,
-                    y_pos: change.y_pos,
-                    mode: change.mode,
-                    title: change.title.unwrap_or_default(),
-                    page_size: change.page_size,
-                    current_page: change.current_page,
-                    y_offset: top_offset,
-                    x_offset: right_offset + 4,
-                    ..Window::default()
-                };
-
-                match direction {
-                    Some(Direction::Horizontal) => {
-                        window.window_right = Some(self.current_window_id);
-                        if let Some(current_window) = self.windows.get_mut(&self.current_window_id)
-                        {
-                            current_window.window_left = Some(window.id);
-                        }
-                    }
-                    Some(Direction::Vertical) => {
-                        window.window_down = Some(self.current_window_id);
-                        if let Some(current_window) = self.windows.get_mut(&self.current_window_id)
-                        {
-                            current_window.window_up = Some(window.id);
-                        }
-                    }
-                    None => (),
-                }
-
-                self.windows.insert(change.id, window);
-                self.current_window_id = change.id;
-            }
-            DisplayToken::SetTextLayout(direction) => {
-                self.add_text_split(direction);
-            }
-            DisplayToken::UpdateWindow(change) => {
-                let right_offset = self
-                    .windows
-                    .get(&change.id)
-                    .and_then(|w| w.window_left)
-                    .and_then(|w| self.windows.get(&w))
-                    .and_then(|w| w.right)
-                    .unwrap_or_default();
-                let top_offset = self
-                    .windows
-                    .get(&change.id)
-                    .and_then(|w| w.window_up)
-                    .and_then(|w| self.windows.get(&w))
-                    .and_then(|w| w.bottom)
-                    .unwrap_or(self.text_area.top());
-                if let Some(window) = self.windows.get_mut(&change.id) {
-                    window.x_pos = change.x_pos;
-                    window.y_pos = change.y_pos;
-                    window.mode = change.mode;
-                    window.title = change.title.unwrap_or_default();
-                    window.page_size = change.page_size;
-                    window.current_page = change.current_page;
-                    window.y_offset = top_offset;
-                    window.x_offset = 4 + right_offset;
-                }
-            }
-            DisplayToken::CacheWindowContent(id, text) => {
-                self.cache_formatted_text(&text, id).await;
-                self.cache_line_numbers(&text, id).await;
-            }
-            DisplayToken::CloseWindow(id) => {
-                let current_windows = self.windows.clone();
-                let current_window = current_windows.get(&id);
-                if let Some(current_window) = current_window {
-                    self.windows.remove(&id);
-                    self.highlight_cache.remove(&id);
-                    self.line_num_cache.remove(&id);
-                    match current_window.clone() {
-                        Window {
-                            window_right: Some(window_right),
-                            window_left,
-                            ..
-                        } => {
-                            self.current_window_id = window_right;
-                            self.windows
-                                .get_mut(&window_right)
-                                .map(|w| w.window_left = window_left);
-                            self.remove_text_split(window_right);
-                        }
-                        Window {
-                            window_left: Some(window_left),
-                            window_right,
-                            ..
-                        } => {
-                            self.current_window_id = window_left;
-                            self.windows
-                                .get_mut(&window_left)
-                                .map(|w| w.window_right = window_right);
-                            self.remove_text_split(window_left);
-                        }
-                        Window {
-                            window_up: Some(window_up),
-                            window_down,
-                            ..
-                        } => {
-                            self.current_window_id = window_up;
-                            self.windows
-                                .get_mut(&window_up)
-                                .map(|w| w.window_down = window_down);
-                            self.remove_text_split(window_up);
-                        }
-                        Window {
-                            window_down: Some(window_down),
-                            window_up,
-                            ..
-                        } => {
-                            self.current_window_id = window_down;
-                            self.windows
-                                .get_mut(&window_down)
-                                .map(|w| w.window_up = window_up);
-                            self.remove_text_split(window_down);
-                        }
-                        _ => (),
-                    }
-                }
-            }
-            DisplayToken::CacheCurrentLine(id, text, line_index) => {
-                self.cache_current_line(&text, id, line_index).await;
-            }
-            DisplayToken::CacheNewLine(id, text, line_index) => {
-                self.cache_new_line(&text, id, line_index).await;
-                self.cache_line_numbers(&text, id).await;
-            }
-            DisplayToken::RemoveCacheLine(id, text, line_index) => {
-                self.remove_cache_line(id, line_index).await;
-                self.cache_line_numbers(&text, id).await;
-            }
-            DisplayToken::DrawWindow(_window_id) => {
-                unimplemented!()
-            }
-            DisplayToken::AppendCommand(id, command) => {
-                if let Some(window) = self.windows.get_mut(&id) {
-                    window.command_text = command;
-                }
-            }
-            _ => (),
-        };
-
-        Ok(vec![])
-    }
-
-    async fn handle_command_token(
-        &mut self,
-        _terminal: &mut Term,
-        token: CommandToken,
-    ) -> AnyHowResult<Vec<Token>> {
-        let _ = match token {
-            CommandToken::Quit => {
-                self.should_quit = true;
-                Ok(())
-            }
-            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
-        };
-        Ok(vec![])
-    }
-
-    async fn handle_normal_token(
-        &mut self,
-        terminal: &mut Term,
-        token: NormalToken,
-    ) -> AnyHowResult<Vec<Token>> {
-        match token {
-            NormalToken::WindowLeft => {
-                if let Some(window_id) = self
-                    .windows
-                    .get(&self.current_window_id)
-                    .and_then(|w| w.window_left)
-                {
-                    if let Some(target_window) = self.windows.get(&window_id) {
-                        self.current_window_id = window_id;
-                        let _ = terminal.draw(|f| self.draw(f));
-                        return Ok(vec![Token::Command(CommandToken::SetBuffer(
-                            target_window.buffer_id,
-                        ))]);
-                    }
-                }
-                Ok(vec![])
-            }
-            NormalToken::WindowRight => {
-                if let Some(window_id) = self
-                    .windows
-                    .get(&self.current_window_id)
-                    .and_then(|w| w.window_right)
-                {
-                    if let Some(target_window) = self.windows.get(&window_id) {
-                        self.current_window_id = window_id;
-                        let _ = terminal.draw(|f| self.draw(f));
-                        return Ok(vec![Token::Command(CommandToken::SetBuffer(
-                            target_window.buffer_id,
-                        ))]);
-                    }
-                }
-                Ok(vec![])
-            }
-            NormalToken::WindowUp => {
-                if let Some(window_id) = self
-                    .windows
-                    .get(&self.current_window_id)
-                    .and_then(|w| w.window_up)
-                {
-                    if let Some(target_window) = self.windows.get(&window_id) {
-                        self.current_window_id = window_id;
-                        return Ok(vec![Token::Command(CommandToken::SetBuffer(
-                            target_window.buffer_id,
-                        ))]);
-                    }
-                }
-                Ok(vec![])
-            }
-            NormalToken::WindowDown => {
-                if let Some(window_id) = self
-                    .windows
-                    .get(&self.current_window_id)
-                    .and_then(|w| w.window_down)
-                {
-                    if let Some(target_window) = self.windows.get(&window_id) {
-                        self.current_window_id = window_id;
-                        return Ok(vec![Token::Command(CommandToken::SetBuffer(
-                            target_window.buffer_id,
-                        ))]);
-                    }
-                }
-                Ok(vec![])
-            }
-            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
-        }
-    }
-
-    pub async fn handle_token(
-        &mut self,
-        terminal: &mut Term,
-        token: Token,
-    ) -> AnyHowResult<Vec<Token>> {
-        match token {
-            Token::Display(t) => self.handle_display_token(terminal, t).await,
-            Token::Command(t) => self.handle_command_token(terminal, t).await,
-            Token::Normal(t) => self.handle_normal_token(terminal, t).await,
-            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
-        }
-    }
-
     pub fn new(terminal: &mut Term) -> AnyHowResult<Self> {
         let (head_area, text_area, foot_area) = Ui::create_layout(&terminal.get_frame());
         let ui = Self {
@@ -600,8 +677,8 @@ impl<'a> Ui<'a> {
             theme: None,
             syntax: None,
             current_window_id: Uuid::new_v4(),
-            highlight_cache: HashMap::new(),
-            line_num_cache: HashMap::new(),
+            //highlight_cache: HashMap::new(),
+            //line_num_cache: HashMap::new(),
             head_area,
             text_area,
             foot_area,
@@ -618,6 +695,7 @@ impl<'a> Ui<'a> {
         let mut ui = Self::new(&mut terminal)?;
         while !ui.should_quit {
             if let Ok(token) = rx.recv_async().await {
+                /*
                 if let Ok(tokens) = ui.handle_token(&mut terminal, token).await {
                     for token in tokens {
                         let _ = tx.send_async(token.clone()).await;
@@ -625,6 +703,7 @@ impl<'a> Ui<'a> {
                 } else {
                     ()
                 }
+                */
             }
         }
         Ok(())

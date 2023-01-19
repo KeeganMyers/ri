@@ -3,6 +3,58 @@ use anyhow::Error as AnyHowError;
 use std::{convert::TryFrom, iter::Iterator};
 use termion::event::Key;
 use uuid::Uuid;
+use actix::prelude::*;
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct Quit {}
+
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct TabNew {}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct Write {}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct Enter {}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct Esc {}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct Remove {}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct Append {
+    pub chars: String
+}
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct Split {
+    pub f_name: Option<String>
+}
+
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct SetBuffer {
+    pub id: Uuid
+}
+
+
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct VerticalSplit {
+    pub f_name: Option<String>
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CommandToken {

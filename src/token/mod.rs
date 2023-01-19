@@ -11,13 +11,13 @@ use std::convert::TryFrom;
 use termion::event::Key;
 
 use crate::Mode;
-pub use append_token::AppendToken;
-pub use command_token::CommandToken;
-pub use display_token::DisplayToken;
-pub use insert_token::InsertToken;
-pub use normal_token::NormalToken;
-pub use operator_token::OperatorToken;
-pub use range_token::RangeToken;
+pub use append_token::*;
+pub use command_token::*;
+pub use display_token::*;
+pub use insert_token::*;
+pub use normal_token::*;
+pub use operator_token::*;
+pub use range_token::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {

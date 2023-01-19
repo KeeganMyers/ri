@@ -1,11 +1,13 @@
 use crate::util::event::{Config, Event, Events};
 use crate::{
     token::{
+        command_token::*,
         display_token::{DisplayToken, WindowChange},
         get_token_from_key, get_token_from_str, CommandToken, Token,
     },
     Buffer,
 };
+use actix::prelude::*;
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use flume::{Receiver, Sender};
 use std::collections::HashMap;
@@ -35,52 +37,48 @@ pub struct App {
     pub should_quit: bool,
 }
 
-impl App {
-    pub fn mode(&self) -> Mode {
-        self.buffers
-            .get(&self.current_buffer_id)
-            .map(|b| b.mode.clone())
-            .unwrap_or(Mode::Normal)
-    }
+impl Actor for App {
+    type Context = Context<Self>;
+}
 
-    pub fn new(file_name: Option<String>) -> Result<App, std::io::Error> {
-        match Buffer::new(file_name) {
-            Ok(buffer) => {
-                let mut buff_map = HashMap::new();
-                let buff_id = buffer.id.clone();
-                buff_map.insert(buffer.id, buffer);
-                Ok(Self {
-                    current_buffer_id: buff_id,
-                    buffers: buff_map,
-                    should_quit: false,
-                })
-            }
-            Err(e) => Err(e),
-        }
-    }
+impl Handler<Quit> for App {
+    type Result = ();
 
-    pub fn handle_command_token(&mut self, token: CommandToken) -> AnyHowResult<Vec<Token>> {
-        match token {
-            CommandToken::Quit => {
-                let id = self.current_buffer_id;
-                self.buffers.remove(&id);
-                if let Some(buffer_id) = self.buffers.keys().nth(0) {
-                    self.current_buffer_id = *buffer_id;
-                }
-                if self.buffers.is_empty() {
-                    self.should_quit = true;
-                }
-                Ok(vec![Token::Command(CommandToken::Quit)])
+    fn handle(&mut self, _msg: Quit, _ctx: &mut Context<Self>) {
+            let id = self.current_buffer_id;
+            self.buffers.remove(&id);
+            if let Some(buffer_id) = self.buffers.keys().nth(0) {
+                self.current_buffer_id = *buffer_id;
             }
-            CommandToken::TabNew => Ok(vec![]),
-            CommandToken::Split(f_name) => {
-                if let Some(file_name) = f_name {
+            if self.buffers.is_empty() {
+                self.should_quit = true;
+            }
+            unimplemented!();
+            //Ok(vec![Token::Command(CommandToken::Quit)])
+    }
+}
+
+
+impl Handler<TabNew> for App {
+    type Result = ();
+
+    fn handle(&mut self, _msg: TabNew, _ctx: &mut Context<Self>) {
+        unimplemented!()
+    }
+}
+
+impl Handler<Split> for App {
+    type Result = ();
+    fn handle(&mut self,msg: Split, _ctx: &mut Context<Self>) {
+                if let Some(file_name) = msg.f_name {
                     let buffer = if let Ok(buffer) = Buffer::new(Some(file_name.trim().to_string()))
                     {
                         buffer
                     } else {
                         Buffer::new(None).unwrap()
                     };
+                    unimplemented!();
+                    /*
                     let response = Ok(vec![
                         Token::Display(DisplayToken::NewWindow(
                             WindowChange {
@@ -102,21 +100,28 @@ impl App {
                         )),
                         Token::Display(DisplayToken::DrawViewPort),
                     ]);
+                    */
                     self.current_buffer_id = buffer.id;
                     self.buffers.insert(buffer.id, buffer);
-                    response
-                } else {
-                    Ok(vec![])
-                }
-            }
-            CommandToken::VerticalSplit(f_name) => {
-                if let Some(file_name) = f_name {
+                    //response
+                } 
+                ()
+    }
+}
+
+
+impl Handler<VerticalSplit> for App {
+    type Result = ();
+    fn handle(&mut self,msg: VerticalSplit, _ctx: &mut Context<Self>) {
+                if let Some(file_name) = msg.f_name {
                     let buffer = if let Ok(buffer) = Buffer::new(Some(file_name.trim().to_string()))
                     {
                         buffer
                     } else {
                         Buffer::new(None).unwrap()
                     };
+                    unimplemented!();
+                    /*
                     let response = Ok(vec![
                         Token::Display(DisplayToken::NewWindow(
                             WindowChange {
@@ -138,39 +143,62 @@ impl App {
                         )),
                         Token::Display(DisplayToken::DrawViewPort),
                     ]);
+                    */
                     self.current_buffer_id = buffer.id;
                     self.buffers.insert(buffer.id, buffer);
-                    response
-                } else {
-                    Ok(vec![])
+                    //response
+                }    
+    }
+}
+
+
+impl Handler<SetBuffer> for App {
+    type Result = ();
+    fn handle(&mut self,msg: SetBuffer, _ctx: &mut Context<Self>) {
+                if let Some(_buffer) = self.buffers.get(&msg.id) {
+                    self.current_buffer_id = msg.id;
                 }
-            }
-            CommandToken::Enter => {
+    }
+}
+
+
+impl Handler<Enter> for App {
+    type Result = ();
+    fn handle(&mut self,_msg: Enter, _ctx: &mut Context<Self>) {
                 if let Some(buffer) = self.buffers.get_mut(&self.current_buffer_id) {
                     if let Some(command_text) = &buffer.command_text {
                         if let Ok(Token::Command(command)) =
                             get_token_from_str(&Mode::Command, &format!(":{}", command_text))
                         {
-                            return self.handle_command_token(command);
+                            unimplemented!();
+                            //return self.handle_command_token(command);
                         }
                     }
                 }
-                Ok(vec![])
-            }
-            CommandToken::SetBuffer(id) => {
-                if let Some(_buffer) = self.buffers.get(&id) {
-                    self.current_buffer_id = id;
-                }
-                Ok(vec![])
-            }
-            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
-        }
+    }
+}
+
+impl App {
+    pub fn mode(&self) -> Mode {
+        self.buffers
+            .get(&self.current_buffer_id)
+            .map(|b| b.mode.clone())
+            .unwrap_or(Mode::Normal)
     }
 
-    pub fn handle_token(&mut self, token: Token) -> AnyHowResult<Vec<Token>> {
-        match token {
-            Token::Command(t) => self.handle_command_token(t),
-            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+    pub fn new(file_name: Option<String>) -> Result<App, std::io::Error> {
+        match Buffer::new(file_name) {
+            Ok(buffer) => {
+                let mut buff_map = HashMap::new();
+                let buff_id = buffer.id.clone();
+                buff_map.insert(buffer.id, buffer);
+                Ok(Self {
+                    current_buffer_id: buff_id,
+                    buffers: buff_map,
+                    should_quit: false,
+                })
+            }
+            Err(e) => Err(e),
         }
     }
 
@@ -231,10 +259,12 @@ impl App {
                     app_events.push(token.clone());
                     draw_events.push(token.clone());
                     if let Some(buffer) = app.buffers.get_mut(&app.current_buffer_id) {
+                        /*
                         if let Ok(mut buff_events) = buffer.handle_token(token.clone()) {
                             draw_events.append(&mut buff_events);
                             app_events.append(&mut buff_events);
                         }
+                        */
                     }
                 } else if let Event::Input(Key::Char(c)) = event {
                     token_str.push_str(&c.to_string());
@@ -243,14 +273,17 @@ impl App {
                         draw_events.push(token.clone());
                         token_str.truncate(0);
                         if let Some(buffer) = app.buffers.get_mut(&app.current_buffer_id) {
+                            /*
                             if let Ok(mut buff_events) = buffer.handle_token(token.clone()) {
                                 draw_events.append(&mut buff_events);
                                 app_events.append(&mut buff_events);
                             }
+                            */
                         }
                     }
                 }
-
+                unimplemented!();
+                /*
                 for token in app_events {
                     if let Ok(mut events) = app.handle_token(token.clone()) {
                         draw_events.append(&mut events);
@@ -262,6 +295,7 @@ impl App {
                 if let Ok(token) = rx.recv_timeout(Duration::from_millis(1)) {
                     let _ = app.handle_token(token);
                 }
+                */
             }
 
             if app.should_quit {
