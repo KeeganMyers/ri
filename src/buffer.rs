@@ -6,7 +6,7 @@ use crate::token::{
     NormalToken, OperatorToken,
     RangeToken, 
 };
-use crate::token::{display_token::*, command_token::*,normal_token::*, Token};
+use crate::token::{display_token::*, command_token::*,normal_token::*, Token, InsertToken,AppendToken};
 
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use arboard::Clipboard;
@@ -16,421 +16,6 @@ use uuid::Uuid;
 
 impl Actor for Buffer {
     type Context = Context<Self>;
-}
-
-
-impl Handler<Quit> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Quit, _ctx: &mut Context<Self>) {
-                self.set_normal_mode();
-                unimplemented!();
-                /*
-                Ok(vec![
-                    Token::Display(DisplayToken::CloseWindow(self.id)),
-                    Token::Display(DisplayToken::DrawViewPort),
-                ])
-                */
-    }
-}
-
-
-impl Handler<Write> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Write, _ctx: &mut Context<Self>) {
-                let _ = self.on_save();
-                unimplemented!();
-                //Ok(vec![Token::Display(DisplayToken::DrawViewPort)])
-    }
-}
-
-
-impl Handler<Split> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Split, _ctx: &mut Context<Self>) {
-            self.set_normal_mode();
-    }
-}
-
-
-impl Handler<VerticalSplit> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: VerticalSplit, _ctx: &mut Context<Self>) {
-            self.set_normal_mode();
-    }
-}
-
-
-impl Handler<crate::token::normal_token::Esc> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: crate::token::normal_token::Esc, _ctx: &mut Context<Self>) {
-                self.start_select_pos = None;
-                self.set_normal_mode();
-                unimplemented!();
-                //Ok(vec![Token::Display(DisplayToken::DrawViewPort)])
-                /*
-                if mode == Mode::Insert {
-                    self.start_select_pos = None;
-                    self.set_normal_mode();
-                    //self.standard_normal_response()
-                }
-                */
-    }
-}
-
-impl Handler<Remove> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Remove, _ctx: &mut Context<Self>) {
-                self.remove_char();
-                if self.mode == Mode::Insert {
-                    //self.standard_insert_response()
-                }
-    }
-}
-
-impl Handler<Append> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, msg: Append, _ctx: &mut Context<Self>) {
-                match self.mode {
-                    Mode::Append => {
-                    let chars = msg.chars;
-                    self.past_states.push(self.text.clone());
-                    self.future_states = vec![];
-                    let char_idx = self.get_cursor_idx() + 1;
-                    if self.text.try_insert(char_idx, &chars).is_ok() {
-                        self.x_pos += chars.len() as u16;
-                    } else if self.text.try_insert(char_idx - 1, &chars).is_ok() {
-                        self.x_pos += chars.len() as u16;
-                    }
-                },
-                Mode::Insert => {
-                    let chars = msg.chars;
-                    self.past_states.push(self.text.clone());
-                    self.future_states = vec![];
-                    let char_idx = self.get_cursor_idx();
-                    if self.text.try_insert(char_idx, &chars).is_ok() {
-                        self.x_pos += chars.len() as u16;
-                    }
-                    unimplemented!();
-                    //self.standard_insert_response()
-                },
-                 Mode::Command => {
-                    self.command_text = self.command_text.clone().map(|mut t| {
-                        t.push_str(&msg.chars);
-                        t
-                    });
-                    unimplemented!();
-                    /*
-                    Ok(vec![
-                        Token::Display(DisplayToken::AppendCommand(
-                            self.id,
-                            self.command_text.clone(),
-                        )),
-                        Token::Display(DisplayToken::DrawViewPort),
-                    ])
-                    */
-                },
-                _ => ()
-    }
-}
-}
-
-
-impl Handler<crate::token::normal_token::Enter> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, msg: crate::token::normal_token::Enter, _ctx: &mut Context<Self>) {
-                match self.mode {
-                    Mode::Append => {
-                    let char_idx = self.get_cursor_idx() + 1;
-                    self.past_states.push(self.text.clone());
-                    self.future_states = vec![];
-                    if self.text.try_insert_char(char_idx, '\n').is_ok() {
-                        self.y_pos += 1;
-                        self.x_pos = 0;
-                    } else if self.text.try_insert_char(char_idx - 1, '\n').is_ok() {
-                        self.y_pos += 1;
-                        self.x_pos = 0;
-                    }
-                },
-                Mode::Insert => {
-                    let char_idx = self.get_cursor_idx();
-                    self.past_states.push(self.text.clone());
-                    self.future_states = vec![];
-                    let _ = self.text.try_insert_char(char_idx, '\n');
-                    self.x_pos = 0;
-                    self.on_down();
-                    unimplemented!();
-                    /*
-                    Ok(vec![
-                        Token::Display(DisplayToken::CacheNewLine(
-                            self.id,
-                            self.text.clone(),
-                            self.y_pos as usize,
-                        )),
-                        Token::Display(DisplayToken::UpdateWindow(WindowChange {
-                            id: self.id,
-                            x_pos: self.x_pos,
-                            y_pos: self.y_pos,
-                            mode: self.mode.clone(),
-                            title: Some(self.title.clone()),
-                            page_size: self.page_size,
-                            current_page: self.current_page,
-                            ..WindowChange::default()
-                        })),
-                        Token::Display(DisplayToken::DrawViewPort),
-                    ])
-                    */
-                }
-                Mode::Normal => {
-                    self.command_text = self.command_text.clone().map(|mut t| {
-                        t.truncate(t.len() - 1);
-                        t
-                    });
-                    unimplemented!();
-                    /*
-                    Ok(vec![
-                        Token::Display(DisplayToken::AppendCommand(
-                            self.id,
-                            self.command_text.clone(),
-                        )),
-                        Token::Display(DisplayToken::DrawViewPort),
-                    ])
-                    */
-                },
-                _ => ()
-                };
-    }
-}
-
-
-impl Handler<Up> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Up, _ctx: &mut Context<Self>) {
-                self.on_up();
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<Down> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Down, _ctx: &mut Context<Self>) {
-                self.on_down();
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<Left> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Left, _ctx: &mut Context<Self>) {
-                self.on_left();
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<Right> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Right, _ctx: &mut Context<Self>) {
-                self.on_right();
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<SwitchToCommand> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: SwitchToCommand, _ctx: &mut Context<Self>) {
-                self.command_text = Some("".to_string());
-                self.set_command_mode();
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<SwitchToInsert> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: SwitchToInsert, _ctx: &mut Context<Self>) {
-                self.set_insert_mode();
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<SwitchToAppend> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: SwitchToAppend, _ctx: &mut Context<Self>) {
-                self.set_append_mode();
-                //self.standard_normal_response()
-    }
-}
-
-
-impl Handler<AddNewLineBelow> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: AddNewLineBelow, _ctx: &mut Context<Self>) {
-                self.add_newline_below();
-                /*
-                Ok(vec![
-                    Token::Display(DisplayToken::CacheNewLine(
-                        self.id,
-                        self.text.clone(),
-                        self.y_pos as usize,
-                    )),
-                    Token::Display(DisplayToken::UpdateWindow(WindowChange {
-                        id: self.id,
-                        x_pos: self.x_pos,
-                        y_pos: self.y_pos,
-                        mode: self.mode.clone(),
-                        title: Some(self.title.clone()),
-                        page_size: self.page_size,
-                        current_page: self.current_page,
-                        ..WindowChange::default()
-                    })),
-                    Token::Display(DisplayToken::DrawViewPort),
-                ])
-                */
-    }
-}
-
-impl Handler<AddNewLineAbove> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: AddNewLineAbove, _ctx: &mut Context<Self>) {
-                self.add_newline_above();
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<Paste> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Paste, _ctx: &mut Context<Self>) {
-                self.paste_text();
-                //self.standard_normal_response()
-    }
-}
-
-
-impl Handler<Undo> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Undo, _ctx: &mut Context<Self>) {
-                self.undo();
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<Redo> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Redo, _ctx: &mut Context<Self>) {
-                self.redo();
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<DeleteLine> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: DeleteLine, _ctx: &mut Context<Self>) {
-                let removed_line_index = self.y_pos;
-                self.delete_line();
-                unimplemented!();
-                /*
-                Ok(vec![
-                    Token::Display(DisplayToken::RemoveCacheLine(
-                        self.id,
-                        self.text.clone(),
-                        removed_line_index as usize,
-                    )),
-                    Token::Display(DisplayToken::UpdateWindow(WindowChange {
-                        id: self.id,
-                        x_pos: self.x_pos,
-                        y_pos: self.y_pos,
-                        mode: self.mode.clone(),
-                        title: Some(self.title.clone()),
-                        page_size: self.page_size,
-                        current_page: self.current_page,
-                        ..WindowChange::default()
-                    })),
-                    Token::Display(DisplayToken::DrawViewPort),
-                ])
-                */
-    }
-}
-
-impl Handler<Visual> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Visual, _ctx: &mut Context<Self>) {
-                self.set_visual_mode();
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<VisualLine> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: VisualLine, _ctx: &mut Context<Self>) {
-                self.select_line();
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<Last> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: Last, _ctx: &mut Context<Self>) {
-                self.x_pos = (self.current_line_len() - 2) as u16;
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<LastNonBlank> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: LastNonBlank, _ctx: &mut Context<Self>) {
-                self.x_pos = (self.current_line_len() - 2) as u16;
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<First> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: First, _ctx: &mut Context<Self>) {
-                self.x_pos = 0 as u16;
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<FirstNonBlank> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: FirstNonBlank, _ctx: &mut Context<Self>) {
-                self.x_pos = 0 as u16;
-                //self.standard_normal_response()
-    }
-}
-
-impl Handler<StartWord> for Buffer {
-    type Result = ();
-
-    fn handle(&mut self, _msg: StartWord, _ctx: &mut Context<Self>) {
-                self.x_pos = self.find_next_word();
-                //self.standard_normal_response()
-    }
 }
 
 pub struct Buffer {
@@ -754,6 +339,113 @@ impl Buffer {
         }
     }
 
+    pub fn handle_append_token(&mut self, token: AppendToken) -> AnyHowResult<Vec<Token>> {
+        let _ = match token {
+            AppendToken::Enter => {
+                let char_idx = self.get_cursor_idx() + 1;
+                self.past_states.push(self.text.clone());
+                self.future_states = vec![];
+                if self.text.try_insert_char(char_idx, '\n').is_ok() {
+                    self.y_pos += 1;
+                    self.x_pos = 0;
+                } else if self.text.try_insert_char(char_idx - 1, '\n').is_ok() {
+                    self.y_pos += 1;
+                    self.x_pos = 0;
+                }
+                Ok(())
+            }
+            AppendToken::Append(chars) => {
+                self.past_states.push(self.text.clone());
+                self.future_states = vec![];
+                let char_idx = self.get_cursor_idx() + 1;
+                if self.text.try_insert(char_idx, &chars).is_ok() {
+                    self.x_pos += chars.len() as u16;
+                } else if self.text.try_insert(char_idx - 1, &chars).is_ok() {
+                    self.x_pos += chars.len() as u16;
+                }
+                Ok(())
+            }
+            AppendToken::Remove => {
+                self.remove_char();
+                Ok(())
+            }
+            AppendToken::Esc => {
+                self.start_select_pos = None;
+                self.set_normal_mode();
+                Ok(())
+            }
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+        };
+        Ok(vec![])
+    }
+
+    pub fn handle_command_token(&mut self, token: CommandToken) -> AnyHowResult<Vec<Token>> {
+        match token {
+            CommandToken::Quit => {
+                self.set_normal_mode();
+                Ok(vec![
+                    Token::Display(DisplayToken::CloseWindow(self.id)),
+                    Token::Display(DisplayToken::DrawViewPort),
+                ])
+            }
+            CommandToken::Write => {
+                let _ = self.on_save();
+                Ok(vec![Token::Display(DisplayToken::DrawViewPort)])
+            }
+            CommandToken::Split(_) => {
+                self.set_normal_mode();
+                Ok(vec![])
+            }
+            CommandToken::VerticalSplit(_) => {
+                self.set_normal_mode();
+                Ok(vec![])
+            }
+            CommandToken::Esc => {
+                self.set_normal_mode();
+                Ok(vec![Token::Display(DisplayToken::DrawViewPort)])
+            }
+            CommandToken::Append(chars) => {
+                self.command_text = self.command_text.clone().map(|mut t| {
+                    t.push_str(&chars);
+                    t
+                });
+                Ok(vec![
+                    Token::Display(DisplayToken::AppendCommand(
+                        self.id,
+                        self.command_text.clone(),
+                    )),
+                    Token::Display(DisplayToken::DrawViewPort),
+                ])
+            }
+            CommandToken::Remove => {
+                self.command_text = self.command_text.clone().map(|mut t| {
+                    t.truncate(t.len() - 1);
+                    t
+                });
+                Ok(vec![
+                    Token::Display(DisplayToken::AppendCommand(
+                        self.id,
+                        self.command_text.clone(),
+                    )),
+                    Token::Display(DisplayToken::DrawViewPort),
+                ])
+            }
+            CommandToken::Enter => {
+                if let Some(command_text) = &self.command_text {
+                    /*
+                    if let Ok(Token::Command(command)) =
+                        get_token_from_str(&Mode::Command, &format!(":{}", command_text))
+                    {
+                        return self.handle_command_token(command);
+                    }
+                    */
+                }
+                Ok(vec![Token::Display(DisplayToken::DrawViewPort)])
+            }
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+        }
+    }
+
     fn standard_insert_response(&self) -> AnyHowResult<Vec<Token>> {
         Ok(vec![
             Token::Display(DisplayToken::CacheCurrentLine(
@@ -775,6 +467,57 @@ impl Buffer {
         ])
     }
 
+   pub fn handle_insert_token(&mut self, token: InsertToken) -> AnyHowResult<Vec<Token>> {
+        match token {
+            InsertToken::Enter => {
+                let char_idx = self.get_cursor_idx();
+                self.past_states.push(self.text.clone());
+                self.future_states = vec![];
+                let _ = self.text.try_insert_char(char_idx, '\n');
+                self.x_pos = 0;
+                self.on_down();
+
+                Ok(vec![
+                    Token::Display(DisplayToken::CacheNewLine(
+                        self.id,
+                        self.text.clone(),
+                        self.y_pos as usize,
+                    )),
+                    Token::Display(DisplayToken::UpdateWindow(WindowChange {
+                        id: self.id,
+                        x_pos: self.x_pos,
+                        y_pos: self.y_pos,
+                        mode: self.mode.clone(),
+                        title: Some(self.title.clone()),
+                        page_size: self.page_size,
+                        current_page: self.current_page,
+                        ..WindowChange::default()
+                    })),
+                    Token::Display(DisplayToken::DrawViewPort),
+                ])
+            }
+            InsertToken::Append(chars) => {
+                self.past_states.push(self.text.clone());
+                self.future_states = vec![];
+                let char_idx = self.get_cursor_idx();
+                if self.text.try_insert(char_idx, &chars).is_ok() {
+                    self.x_pos += chars.len() as u16;
+                }
+                self.standard_insert_response()
+            }
+            InsertToken::Remove => {
+                self.remove_char();
+                self.standard_insert_response()
+            }
+            InsertToken::Esc => {
+                self.start_select_pos = None;
+                self.set_normal_mode();
+                self.standard_normal_response()
+            }
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+        }
+    }
+
     fn standard_normal_response(&self) -> AnyHowResult<Vec<Token>> {
         Ok(vec![
             Token::Display(DisplayToken::UpdateWindow(WindowChange {
@@ -789,6 +532,128 @@ impl Buffer {
             })),
             Token::Display(DisplayToken::DrawViewPort),
         ])
+    }
+
+    pub fn handle_normal_token(&mut self, token: NormalToken) -> AnyHowResult<Vec<Token>> {
+        match token {
+            NormalToken::Up => {
+                self.on_up();
+                self.standard_normal_response()
+            }
+            NormalToken::Down => {
+                self.on_down();
+                self.standard_normal_response()
+            }
+            NormalToken::Left => {
+                self.on_left();
+                self.standard_normal_response()
+            }
+            NormalToken::Right => {
+                self.on_right();
+                self.standard_normal_response()
+            }
+            NormalToken::SwitchToCommand => {
+                self.command_text = Some("".to_string());
+                self.set_command_mode();
+                self.standard_normal_response()
+            }
+            NormalToken::SwitchToInsert => {
+                self.set_insert_mode();
+                self.standard_normal_response()
+            }
+            NormalToken::SwitchToAppend => {
+                self.set_append_mode();
+                self.standard_normal_response()
+            }
+            NormalToken::AddNewLineBelow => {
+                self.add_newline_below();
+                Ok(vec![
+                    Token::Display(DisplayToken::CacheNewLine(
+                        self.id,
+                        self.text.clone(),
+                        self.y_pos as usize,
+                    )),
+                    Token::Display(DisplayToken::UpdateWindow(WindowChange {
+                        id: self.id,
+                        x_pos: self.x_pos,
+                        y_pos: self.y_pos,
+                        mode: self.mode.clone(),
+                        title: Some(self.title.clone()),
+                        page_size: self.page_size,
+                        current_page: self.current_page,
+                        ..WindowChange::default()
+                    })),
+                    Token::Display(DisplayToken::DrawViewPort),
+                ])
+            }
+            NormalToken::AddNewLineAbove => {
+                self.add_newline_above();
+                self.standard_normal_response()
+            }
+            NormalToken::Paste => {
+                self.paste_text();
+                self.standard_normal_response()
+            }
+            NormalToken::Undo => {
+                self.undo();
+                self.standard_normal_response()
+            }
+            NormalToken::Redo => {
+                self.redo();
+                self.standard_normal_response()
+            }
+            NormalToken::DeleteLine => {
+                let removed_line_index = self.y_pos;
+                self.delete_line();
+                Ok(vec![
+                    Token::Display(DisplayToken::RemoveCacheLine(
+                        self.id,
+                        self.text.clone(),
+                        removed_line_index as usize,
+                    )),
+                    Token::Display(DisplayToken::UpdateWindow(WindowChange {
+                        id: self.id,
+                        x_pos: self.x_pos,
+                        y_pos: self.y_pos,
+                        mode: self.mode.clone(),
+                        title: Some(self.title.clone()),
+                        page_size: self.page_size,
+                        current_page: self.current_page,
+                        ..WindowChange::default()
+                    })),
+                    Token::Display(DisplayToken::DrawViewPort),
+                ])
+            }
+            NormalToken::Visual => {
+                self.set_visual_mode();
+                self.standard_normal_response()
+            }
+            NormalToken::VisualLine => {
+                self.select_line();
+                self.standard_normal_response()
+            }
+            NormalToken::Last => {
+                self.x_pos = (self.current_line_len() - 2) as u16;
+                self.standard_normal_response()
+            }
+            NormalToken::LastNonBlank => {
+                self.x_pos = (self.current_line_len() - 2) as u16;
+                self.standard_normal_response()
+            }
+            NormalToken::First => {
+                self.x_pos = 0 as u16;
+                self.standard_normal_response()
+            }
+            NormalToken::FirstNonBlank => {
+                self.x_pos = 0 as u16;
+                self.standard_normal_response()
+            }
+            NormalToken::StartWord => {
+                self.x_pos = self.find_next_word();
+                self.standard_normal_response()
+            }
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+        }
     }
 
         /*
@@ -873,4 +738,25 @@ impl Buffer {
     }
         */
 
+}
+
+impl Handler<Token> for Buffer {
+    type Result = ();
+    fn handle(&mut self,msg: Token, _ctx: &mut Context<Self>) {
+        let _ = match msg {
+            Token::Append(t) => {
+                let _ = self.handle_append_token(t);
+                Ok(vec![])
+            }
+            Token::Command(t) => self.handle_command_token(t),
+            Token::Insert(t) => self.handle_insert_token(t),
+            Token::Normal(t) => self.handle_normal_token(t),
+            //Token::Operator(t) => self.handle_operator_token(t),
+            //Token::Range(t) => {
+             //   let _ = self.handle_range_token(t);
+              //  Ok(vec![])
+            //}
+            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+        };
+    }
 }

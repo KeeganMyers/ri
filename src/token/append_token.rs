@@ -1,4 +1,3 @@
-use crate::util::event::Event;
 use anyhow::Error as AnyHowError;
 use std::{convert::TryFrom, iter::Iterator};
 use termion::event::Key;
@@ -23,13 +22,13 @@ impl TryFrom<&String> for AppendToken {
     }
 }
 
-impl TryFrom<&Event<Key>> for AppendToken {
+impl TryFrom<&Key> for AppendToken {
     type Error = AnyHowError;
 
-    fn try_from(key: &Event<Key>) -> Result<Self, Self::Error> {
+    fn try_from(key: &Key) -> Result<Self, Self::Error> {
         match key {
-            Event::Input(Key::Esc) => Ok(Self::Esc),
-            Event::Input(Key::Backspace) => Ok(Self::Remove),
+            Key::Esc => Ok(Self::Esc),
+            Key::Backspace => Ok(Self::Remove),
             _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),
         }
     }

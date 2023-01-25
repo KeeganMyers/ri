@@ -1,6 +1,7 @@
 use crate::app::Mode;
-use tui::layout::Rect;
+use tui::{text::Spans,layout::Rect};
 use uuid::Uuid;
+use actix::prelude::*;
 
 #[derive(Debug, Copy, Clone)]
 pub struct WindowPosition {
@@ -10,6 +11,7 @@ pub struct WindowPosition {
 
 #[derive(Default, Clone, Debug)]
 pub struct Window {
+//pub struct Window<'a> {
     pub id: Uuid,
     pub title: String,
     pub current_percent_size: u16,
@@ -30,9 +32,18 @@ pub struct Window {
     pub window_right: Option<Uuid>,
     pub window_up: Option<Uuid>,
     pub window_down: Option<Uuid>,
+    //pub highlight_cache: Vec<Spans<'a>>,
+    //pub line_num_cache: Spans<'a>,
 }
 
+/*
+impl Actor for Window<'static> {
+    type Context = Context<Self>;
+}
+*/
+
 impl Window {
+//impl<'a> Window<'a> {
     pub fn new(_buffer_idx: u16) -> Self {
         Self::default()
     }

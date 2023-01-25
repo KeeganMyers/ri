@@ -1,5 +1,4 @@
 use crate::app::Mode;
-use crate::util::event::Event;
 use anyhow::Error as AnyHowError;
 use ropey::Rope;
 use std::{convert::TryFrom, iter::Iterator};
@@ -120,10 +119,10 @@ impl TryFrom<&String> for DisplayToken {
     }
 }
 
-impl TryFrom<&Event<Key>> for DisplayToken {
+impl TryFrom<&Key> for DisplayToken {
     type Error = AnyHowError;
 
-    fn try_from(key: &Event<Key>) -> Result<Self, Self::Error> {
+    fn try_from(key: &Key) -> Result<Self, Self::Error> {
         match key {
             _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),
         }
