@@ -6,7 +6,7 @@ use crate::{
         get_token_from_key, get_token_from_str, Token,
     },
 };
-use termion::event::Key;
+use crossterm::event::{KeyCode,KeyEvent as Key};
 
 pub struct Parser {
     pub mode: Mode
@@ -30,7 +30,7 @@ impl Handler<UserInput> for Parser {
                 let mut token_str = String::new();
                 if let Ok(token) = get_token_from_key(&self.mode, &event) {
                     return Ok(token);
-                } else if let Key::Char(c) = event {
+                } else if let KeyCode::Char(c) = event.code {
                     token_str.push_str(&c.to_string());
                     if let Ok(token) = get_token_from_str(&self.mode, &token_str) {
                         token_str.truncate(0);

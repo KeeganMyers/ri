@@ -1,6 +1,6 @@
 use anyhow::Error as AnyHowError;
 use std::{convert::TryFrom, iter::Iterator};
-use termion::event::Key;
+use crossterm::event::{KeyCode,KeyEvent as Key};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum NormalToken {
@@ -90,13 +90,13 @@ impl TryFrom<&Key> for NormalToken {
     type Error = AnyHowError;
 
     fn try_from(key: &Key) -> Result<Self, Self::Error> {
-        match key {
-            Key::Up => Ok(Self::Up),
-            Key::Down => Ok(Self::Down),
-            Key::Left => Ok(Self::Left),
-            Key::Right => Ok(Self::Right),
-            Key::Esc => Ok(Self::Esc),
-            Key::Backspace => Ok(Self::Left),
+        match key.code {
+            KeyCode::Up => Ok(Self::Up),
+            KeyCode::Down => Ok(Self::Down),
+            KeyCode::Left => Ok(Self::Left),
+            KeyCode::Right => Ok(Self::Right),
+            KeyCode::Esc => Ok(Self::Esc),
+            KeyCode::Backspace => Ok(Self::Left),
             _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),
         }
     }

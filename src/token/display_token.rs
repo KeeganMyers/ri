@@ -2,10 +2,13 @@ use crate::app::Mode;
 use anyhow::Error as AnyHowError;
 use ropey::Rope;
 use std::{convert::TryFrom, iter::Iterator};
-use termion::event::Key;
+use crossterm::event::KeyEvent as Key;
 use tui::layout::Direction;
 use uuid::Uuid;
-use actix::prelude::*;
+use crate::window::Window;
+use std::collections::HashMap;
+use crate::ui::Term;
+use tui::layout::Rect;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WindowChange {
@@ -19,87 +22,14 @@ pub struct WindowChange {
     pub current_page: u16,
 }
 
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct DrawViewPort {}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct SetHighlight {}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct NewWindow {
-    pub change: WindowChange,
-    pub direction: Option<Direction>
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct SetTextLayout {
-    pub direction: Direction
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct UpdateWindow {
-    pub  change: WindowChange
-}
-
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct CacheWindowContent {
-    pub  id: Uuid
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct CloseWindow {
-    pub  id: Uuid
-}
-
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct CacheCurrentLine {
-    pub id: Uuid,
-    pub text: Rope,
-    pub line_index: usize
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct CacheNewLine {
-    pub id: Uuid,
-    pub text: Rope,
-    pub line_index: usize
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct RemoveCacheLine {
-    pub id: Uuid,
-    pub text: Rope,
-    pub line_index: usize
-}
-
-#[derive(Message)]
-#[rtype(result = "()")]
-pub struct AppendCommand {
-    pub id: Uuid,
-    pub command: Option<String>
-}
-
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum DisplayToken {
     SetHighlight,
     UpdateWindow(WindowChange),
     NewWindow(WindowChange, Option<Direction>),
-    DropWindow(Uuid),
     DrawViewPort,
+    DrawWindow,
     SetTextLayout(Direction),
-    DrawWindow(Uuid),
     CacheWindowContent(Uuid, Rope),
     AppendCommand(Uuid, Option<String>),
     CacheCurrentLine(Uuid, Rope, usize),

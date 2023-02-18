@@ -5,21 +5,16 @@ mod ui;
 mod window;
 mod parser;
 
-use std::io;
-use std::io::Write;
-use std::thread;
-use std::time;
-
-use termion;
-use termion::input::TermRead;
-use termion::raw::IntoRawMode;
+use crossterm::{execute, terminal::{ScrollUp, SetSize, size}};
+use crossterm;
+use crossterm::event::{poll, read, Event};
 use std::time::Duration;
 use actix::prelude::*;
 use crate::{
     parser::{Parser,UserInput},
     app::{App, Mode},
     buffer::Buffer,
-    token::Token,
+    token::{CommandToken,Token},
     ui::Ui,
     window::Window,
 };
@@ -83,37 +78,23 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let system = System::new();
     let execution = async {
         let app = App::new(cli.file_name).unwrap().start();
-        //let ui = Ui::new().unwrap().start();
         let parser = Parser {mode: Mode::Normal}.start();
-        let _ = io::stdout().into_raw_mode().unwrap();
-        let mut stdin = termion::async_stdin().keys();
+        let _ = app.send(Token::Command(CommandToken::NoOp)).await;
         loop {
-            let input = stdin.next();
-            if let Some(Ok(event)) = input {
-                if let Ok(Ok(token)) = parser.send(UserInput {event}).await {
-                    log::info!("sending {:?} to app", token);
-                    let _ = app.send(token).await;
+             if let Ok(_) = poll(Duration::from_millis(500)) {
+                let input = read();
+                if let Ok(Event::Key(event)) = input {
+                    if let Ok(Ok(token)) = parser.send(UserInput {event}).await {
+                        let _ = app.send(token).await;
+                    }
+                   () 
                 }
-               () 
-            }
-            thread::sleep(time::Duration::from_millis(50));
+             }
          }
     };
         let arbiter = Arbiter::new();
         arbiter.spawn(execution);
         let _ = system.run();
-
-    /*
-    let (app_tx, app_rx) = flume::unbounded::<Token>();
-    let (ui_tx, ui_rx) = flume::unbounded::<Token>();
-    let ui_handler = async_std::task::spawn(Ui::receive_tokens(app_rx.clone(), ui_tx.clone()));
-    let app_handler = async_std::task::spawn(App::receive_tokens(
-        cli.file_name,
-        ui_rx.clone(),
-        app_tx.clone(),
-    ));
-    let _ = ui_handler.await;
-    let _ = app_handler.await;
-    */
     Ok(())
 }
+

@@ -1,6 +1,6 @@
 use anyhow::Error as AnyHowError;
 use std::{convert::TryFrom, iter::Iterator};
-use termion::event::Key;
+use crossterm::event::{KeyCode,KeyEvent as Key};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum OperatorToken {
@@ -45,9 +45,9 @@ impl TryFrom<&Key> for OperatorToken {
     type Error = AnyHowError;
 
     fn try_from(key: &Key) -> Result<Self, Self::Error> {
-        match key {
-            Key::Esc => Ok(Self::Esc),
-            Key::Backspace => Ok(Self::Remove),
+        match key.code {
+            KeyCode::Esc => Ok(Self::Esc),
+            KeyCode::Backspace => Ok(Self::Remove),
             _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),
         }
     }

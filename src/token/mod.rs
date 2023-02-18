@@ -7,7 +7,7 @@ pub mod operator_token;
 pub mod range_token;
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use std::convert::TryFrom;
-use termion::event::Key;
+use crossterm::event::KeyEvent as Key;
 
 use crate::Mode;
 pub use append_token::*;
@@ -21,7 +21,7 @@ use actix::prelude::*;
 
 #[derive(Message)]
 #[rtype(result = "()")]
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Token {
     Append(AppendToken),
     Command(CommandToken),

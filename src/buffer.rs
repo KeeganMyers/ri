@@ -385,12 +385,13 @@ impl Buffer {
                 self.set_normal_mode();
                 Ok(vec![
                     Token::Display(DisplayToken::CloseWindow(self.id)),
-                    Token::Display(DisplayToken::DrawViewPort),
+                    //Token::Display(DisplayToken::DrawViewPort),
                 ])
             }
             CommandToken::Write => {
                 let _ = self.on_save();
-                Ok(vec![Token::Display(DisplayToken::DrawViewPort)])
+                //Ok(vec![Token::Display(DisplayToken::DrawViewPort)])
+                Ok(vec![])
             }
             CommandToken::Split(_) => {
                 self.set_normal_mode();
@@ -402,7 +403,8 @@ impl Buffer {
             }
             CommandToken::Esc => {
                 self.set_normal_mode();
-                Ok(vec![Token::Display(DisplayToken::DrawViewPort)])
+                //Ok(vec![Token::Display(DisplayToken::DrawViewPort)])
+                Ok(vec![])
             }
             CommandToken::Append(chars) => {
                 self.command_text = self.command_text.clone().map(|mut t| {
@@ -414,7 +416,7 @@ impl Buffer {
                         self.id,
                         self.command_text.clone(),
                     )),
-                    Token::Display(DisplayToken::DrawViewPort),
+                    //Token::Display(DisplayToken::DrawViewPort),
                 ])
             }
             CommandToken::Remove => {
@@ -427,7 +429,7 @@ impl Buffer {
                         self.id,
                         self.command_text.clone(),
                     )),
-                    Token::Display(DisplayToken::DrawViewPort),
+                    //Token::Display(DisplayToken::DrawViewPort),
                 ])
             }
             CommandToken::Enter => {
@@ -440,7 +442,8 @@ impl Buffer {
                     }
                     */
                 }
-                Ok(vec![Token::Display(DisplayToken::DrawViewPort)])
+                Ok(vec![])
+                //Ok(vec![Token::Display(DisplayToken::DrawViewPort)])
             }
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
         }
@@ -463,7 +466,7 @@ impl Buffer {
                 current_page: self.current_page,
                 ..WindowChange::default()
             })),
-            Token::Display(DisplayToken::DrawViewPort),
+            //Token::Display(DisplayToken::DrawViewPort),
         ])
     }
 
@@ -493,7 +496,7 @@ impl Buffer {
                         current_page: self.current_page,
                         ..WindowChange::default()
                     })),
-                    Token::Display(DisplayToken::DrawViewPort),
+                    //Token::Display(DisplayToken::DrawViewPort),
                 ])
             }
             InsertToken::Append(chars) => {
@@ -530,7 +533,7 @@ impl Buffer {
                 current_page: self.current_page,
                 ..WindowChange::default()
             })),
-            Token::Display(DisplayToken::DrawViewPort),
+            //Token::Display(DisplayToken::DrawViewPort),
         ])
     }
 
@@ -583,7 +586,7 @@ impl Buffer {
                         current_page: self.current_page,
                         ..WindowChange::default()
                     })),
-                    Token::Display(DisplayToken::DrawViewPort),
+                    //Token::Display(DisplayToken::DrawViewPort),
                 ])
             }
             NormalToken::AddNewLineAbove => {
@@ -621,7 +624,7 @@ impl Buffer {
                         current_page: self.current_page,
                         ..WindowChange::default()
                     })),
-                    Token::Display(DisplayToken::DrawViewPort),
+                    //Token::Display(DisplayToken::DrawViewPort),
                 ])
             }
             NormalToken::Visual => {
