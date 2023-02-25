@@ -1,7 +1,7 @@
 use crate::{token::{display_token::*, command_token::*,normal_token::*, Token}};
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use crate::Window;
-use std::sync::Arc;
+use std::sync::{Mutex,Arc};
 use ropey::Rope;
 use std::collections::HashMap;
 use std::io::{stdout};
@@ -34,8 +34,10 @@ use tui::{
 };
 use uuid::Uuid;
 pub type Term = Terminal<CrosstermBackend<Stdout>>;
-pub struct Ui{
-    pub app: Recipient<Token>,
+
+#[derive(Default)]
+pub struct Ui {
+    pub app: Option<Recipient<Token>>,
     pub should_quit: bool,
     pub syntax_set: Option<SyntaxSet>,
     pub theme_set: Option<ThemeSet>,
@@ -45,7 +47,7 @@ pub struct Ui{
     pub head_area: Rect,
     pub text_area: Rect,
     pub foot_area: Rect,
-    pub terminal: Term
+    pub terminal: Option<Arc<Mutex<Term>>>
     //pub highlight_cache: HashMap<Uuid, Vec<Spans<'a>>>,
     //pub line_num_cache: HashMap<Uuid, Spans<'a>>,
 }
@@ -134,7 +136,7 @@ impl Ui {
         */
     }
 
-    pub fn draw<'a,B: 'a> (head_area: Rect,foot_area: Rect, f: &mut Frame<'a,B>,) 
+    pub fn draw<'a,B: 'a> (head_area: Rect,foot_area: Rect, text_area: Rect,window_widgets: Vec<Window>,f: &mut Frame<'a,B>,) 
         where 
             B: Backend
     {
@@ -144,6 +146,11 @@ impl Ui {
             f,
             head_area,
         );
+
+        for window in window_widgets {
+            f.render_widget(window,text_area)
+        }
+
         /*
         for window in windows.values() {
              f.render_widget(window.clone(), f.size());
@@ -304,29 +311,30 @@ impl Ui {
         f.render_widget(paragraph, area);
     }
 
-    pub fn new(app: Recipient<Token>) -> AnyHowResult<Self> {
-       enable_raw_mode()?;
+    pub fn new(app: Recipient<Token>,terminal: Arc<Mutex<Term>>) -> AnyHowResult<Self> {
+      /*
         let _ = execute!(stdout(), terminal::Clear(ClearType::All));
        let mut stdout = stdout();
         execute!(stdout, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
-        let (head_area, text_area, foot_area) = Ui::create_layout(&terminal.get_frame());
-        let  term_arc = Arc::new(terminal);
+      */
+        let  term_arc = terminal.clone();
+        let mut term_lock = term_arc.lock().map_err(|e| AnyHowError::msg(format!("{:?}",e)))?;
+        let (head_area, text_area, foot_area) = Ui::create_layout(&term_lock.get_frame());
         let ui = Self {
-            app,
+            app: Some(app),
             should_quit: false,
             syntax_set: None,
             theme_set: None,
             theme: None,
             syntax: None,
             current_window_id: Uuid::new_v4(),
-            //highlight_cache: HashMap::new(),
-            //line_num_cache: HashMap::new(),
             head_area,
             text_area,
             foot_area,
-            terminal
+            terminal: Some(terminal.clone()),
+            ..Self::default()
         };
         Ok(ui)
     }
@@ -336,11 +344,14 @@ impl Ui {
         token: DisplayToken,
     ) -> AnyHowResult<Vec<Token>> {
         match token {
-            DisplayToken::DrawViewPort => {
+            DisplayToken::DrawViewPort(window_widgets) => {
                 let head_area = self.head_area.clone();
                 let foot_area = self.foot_area.clone();
+                let text_area = self.text_area.clone();
                 let current_window_id = self.current_window_id.clone();
-                let _ = self.terminal.draw(|f| Self::draw(head_area,foot_area,f));
+                if let Some(mut term) = self.terminal.as_ref().and_then(|t| t.lock().ok()) {
+                    let _ = term.draw(|f| Self::draw(head_area,foot_area,text_area,window_widgets,f));
+                }
             }
             DisplayToken::SetHighlight => {
                 let ps = SyntaxSet::load_defaults_newlines();

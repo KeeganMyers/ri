@@ -1,10 +1,17 @@
-use crate::{Buffer,app::Mode, ui::Term,token::{display_token::*, command_token::*,normal_token::*, Token}};
+use crate::{Buffer,app::Mode, ui::Term,token::{display_token::*, command_token::*,normal_token::*, Token,GetState}};
 use uuid::Uuid;
 use actix::prelude::*;
-use tui::{widgets::Widget,
-    text::Spans,
+use std::sync::{Mutex,Arc};
+use anyhow::{Error as AnyHowError, Result as AnyHowResult};
+use tui::{
+    backend::{Backend, CrosstermBackend},
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    buffer::Buffer as TuiBuffer
+    style::{Color, Style},
+    text::{Span, Spans},
+    widgets::{Block, Paragraph, Wrap},
+    Frame, Terminal,
+    buffer::Buffer as TuiBuffer,
+    widgets::Widget,
 };
 
 #[derive(Debug, Copy, Clone)]
@@ -13,9 +20,8 @@ pub struct WindowPosition {
     pub x: u32,
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, MessageResponse)]
 pub struct Window {
-//pub struct Window<'a> {
     pub id: Uuid,
     pub title: String,
     pub current_percent_size: u16,
@@ -36,18 +42,29 @@ pub struct Window {
     pub window_right: Option<Uuid>,
     pub window_up: Option<Uuid>,
     pub window_down: Option<Uuid>,
-    pub terminal: Arc<Term>,
+    pub terminal: Option<Arc<Mutex<Term>>>,
 }
 
 impl Widget for Window {
-    fn render(self, area: Rect, buf: &mut TuiBuffer) {
+    fn render(self, _area: Rect, buf: &mut TuiBuffer) {
         if let Some(area) = self.area {
             let inner_text_splits = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Length(4), Constraint::Percentage(95)].as_ref())
                 .split(area);
-            let line_number_area = inner_text_splits[0];
+            //let line_number_area = inner_text_splits[0];
             let text_area = inner_text_splits[1];
+
+            let spans = Spans::from(vec![Span::raw("hello world")]);
+                /*
+                .alignment(Alignment::Left)
+                .wrap(Wrap { trim: false })
+                .scroll((self.current_page, self.x_pos));
+                term_lock.get_frame().render_widget(paragraph, text_area);
+                */
+
+            buf.set_spans(text_area.x, text_area.y, &spans, text_area.width);
+
             /*
             if let Some(cached_highlights) = highlight_cache.get(&window.buffer_id) {
                 let paragraph = Paragraph::new(cached_highlights.clone())
@@ -71,9 +88,31 @@ impl Widget for Window {
 }
 
 impl Window {
+    pub fn draw<'a,B: 'a> (main_area: Option<Rect>,f: &mut Frame<'a,B>) 
+        where 
+            B: Backend
+    {
+        if let Some(area) = main_area {
+            let inner_text_splits = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints([Constraint::Length(4), Constraint::Percentage(95)].as_ref())
+                .split(area);
+            let line_number_area = inner_text_splits[0];
+            let text_area = inner_text_splits[1];
+            //let tmp_term = self.terminal.clone().unwrap();
+            //let mut term_lock = tmp_term.lock().map_err(|e| AnyHowError::msg(format!("{:?}",e))).unwrap();
+            let paragraph = Paragraph::new(Spans::from(vec![Span::raw("hello world")]))
+                .alignment(Alignment::Left)
+                .wrap(Wrap { trim: false });
+                //.scroll((self.current_page, self.x_pos));
+                //term_lock.get_frame().render_widget(paragraph, text_area);
+                f.render_widget(paragraph, text_area);
+        }
+    }
+
     pub fn new(buffer: &Buffer) -> Self {
             Self {
-                terminal: Arc<Terminal>,
+                terminal: None,
                 id: Uuid::new_v4(),
                 buffer_id: buffer.id,
                 x_pos: buffer.x_pos,
@@ -116,12 +155,12 @@ impl Window {
         token: DisplayToken,
     )  {
         match token {
-        /*
-         DisplayToken::DrawWindow(terminal,area) => {
-            self.area = Some(area);
-            let _ = terminal.draw(|f| f.render_widget(self.clone(), f.size()));
+         DisplayToken::DrawWindow => {
+                let main_area = self.area;
+                if let Some(mut term) = self.terminal.as_ref().and_then(|t| t.lock().ok()) {
+                    term.draw(|f| Self::draw(main_area,f));
+                }
          },
-        */
          _ => ()
         };
         ()
@@ -139,10 +178,17 @@ impl Handler<Token> for Window {
             match msg {
                 Token::Display(t) => {
                     self.handle_display_token(t);
-                    ()
                 },
                 _ => ()
         }
     }
+}
+
+impl Handler<GetState> for Window {
+        type Result = Window;
+
+        fn handle(&mut self, msg: GetState , ctx: &mut Context<Self>) -> Self::Result {
+            self.clone()
+        }
 }
 

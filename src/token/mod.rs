@@ -18,10 +18,11 @@ pub use normal_token::*;
 pub use operator_token::*;
 pub use range_token::*;
 use actix::prelude::*;
+use crate::window::Window;
 
 #[derive(Message)]
 #[rtype(result = "()")]
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Token {
     Append(AppendToken),
     Command(CommandToken),
@@ -31,6 +32,11 @@ pub enum Token {
     Range(RangeToken),
     Display(DisplayToken),
 }
+
+#[derive(Message)]
+#[rtype(result = "Window")]
+#[derive(Clone, Debug)]
+pub struct GetState {}
 
 pub fn get_token_from_str(mode: &Mode, input: &String) -> AnyHowResult<Token> {
     match mode {

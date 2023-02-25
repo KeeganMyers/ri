@@ -2,18 +2,21 @@ use crate::{
     token::{
         display_token::{DisplayToken, WindowChange},
         get_token_from_key, get_token_from_str, CommandToken, Token,
+        GetState
     },
     Ui,Window, ui::Term,
     Buffer,
 };
 
-use std::sync::Arc;
+use std::sync::{Mutex,Arc};
 use actix::prelude::*;
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use flume::{Receiver, Sender};
 use std::collections::HashMap;
 use std::time::Duration;
-use tui::layout::Direction;
+use tui::{Terminal,layout::Direction,backend::CrosstermBackend};
+use crossterm::{event::EnableMouseCapture,execute,terminal,terminal::{enable_raw_mode,disable_raw_mode,ClearType}};
+use std::io::stdout;
 use uuid::Uuid;
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -32,7 +35,7 @@ impl Default for Mode {
 }
 
 pub struct App {
-    pub terminal: Arc<Term>,
+    pub terminal: Arc<Mutex<Term>>,
     pub buffers: HashMap<Uuid, Addr<Buffer>>,
     pub ui: Option<Addr<Ui>>,
     pub windows: HashMap<Uuid, Addr<Window>>,
@@ -40,6 +43,7 @@ pub struct App {
     pub current_buffer_id: Uuid,
     pub should_quit: bool,
     pub mode: Mode,
+    pub current_file: Option<String>
 }
 
 impl Actor for App {
@@ -47,39 +51,64 @@ impl Actor for App {
 
     fn started(&mut self, ctx: &mut Context<Self>) {
         let addr = ctx.address().recipient();
-        if let Ok(ui) =  Ui::new(addr) {
+        if let Ok(ui) =  Ui::new(addr,self.terminal.clone()) {
+            let buffer = Buffer::new(self.current_file.clone()).unwrap();
+            let mut window = Window::new(&buffer);
+            let buff_id = buffer.id.clone();
+            let window_id = window.id.clone();
+
+            window.area = Some(ui.text_area.clone());
+            window.terminal = Some(self.terminal.clone());
             let ui_addr = ui.start();
+            self.buffers.insert(buffer.id, buffer.start());
+            self.windows.insert(window.id, window.start());
+            self.current_buffer_id = buff_id;
+            self.current_window_id = window_id;
+
             self.ui = Some(ui_addr.clone());
-            let _ = ui_addr.do_send(Token::Display(DisplayToken::SetHighlight));
-            let _ = ui_addr.do_send(Token::Display(DisplayToken::SetTextLayout(Direction::Horizontal)));
-            let _ = ui_addr.do_send(Token::Display(DisplayToken::DrawViewPort));
+            let _ = ui_addr.try_send(Token::Display(DisplayToken::SetHighlight));
+            let _ = ui_addr.try_send(Token::Display(DisplayToken::SetTextLayout(Direction::Horizontal)));
+            
+            let windows = self.windows.clone();
+            async move {
+            let _ = Self::render_ui(&ui_addr,&windows).await;
+            }.into_actor(self)
+            .wait(ctx)
         }
     } 
 }
 
 impl App {
+    pub async fn render_ui(ui: &Addr<Ui>, windows: &HashMap<Uuid,Addr<Window>>) -> AnyHowResult<()> {
+            let mut window_widgets: Vec<Window> = vec![];
+            for window in windows.values() {
+                if let Ok(window_widget) = window.send(GetState {}).await {
+                  window_widgets.push(window_widget)
+                }
+            }
+
+            let _ = ui.try_send(Token::Display(DisplayToken::DrawViewPort(window_widgets)));
+        Ok(())
+    }
+
     pub fn new(file_name: Option<String>) -> AnyHowResult<App> {
-        let buffer = Buffer::new(file_name)?;
-        let window = Window::new(&buffer);
+        enable_raw_mode()?;
         let _ = execute!(stdout(), terminal::Clear(ClearType::All));
        let mut stdout = stdout();
         execute!(stdout, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
-        let mut terminal = Terminal::new(backend)?;
-        let  terminal_arc = Arc::new(terminal);
-        let mut buff_map = HashMap::new();
-        let mut window_map = HashMap::new();
-        let buff_id = buffer.id.clone();
-        let window_id = window.id.clone();
-        buff_map.insert(buffer.id, buffer.start());
-        window_map.insert(window.id, window.start());
+        let terminal = Terminal::new(backend)?;
+        let  terminal_arc = Arc::new(Mutex::new(terminal));
+        let buff_map = HashMap::new();
+        let window_map = HashMap::new();
         Ok(Self {
-            terminal: terminal_arc;
-            current_buffer_id: buff_id,
-            current_window_id: window_id,
+            terminal: terminal_arc,
             windows: window_map,
             buffers: buff_map,
+            current_file: file_name,
             should_quit: false,
+            current_buffer_id: Uuid::new_v4(),
+            current_window_id: Uuid::new_v4(),
             ui: None,
             mode: Mode::Normal
         })

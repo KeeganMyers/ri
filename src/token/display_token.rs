@@ -22,12 +22,12 @@ pub struct WindowChange {
     pub current_page: u16,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum DisplayToken {
     SetHighlight,
     UpdateWindow(WindowChange),
     NewWindow(WindowChange, Option<Direction>),
-    DrawViewPort,
+    DrawViewPort(Vec<Window>),
     DrawWindow,
     SetTextLayout(Direction),
     CacheWindowContent(Uuid, Rope),
