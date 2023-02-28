@@ -1,6 +1,9 @@
 use crate::{Buffer,app::Mode, ui::Term,token::{display_token::*, command_token::*,normal_token::*, Token,GetState}};
 use uuid::Uuid;
 use actix::prelude::*;
+use syntect::easy::HighlightLines;
+use syntect::highlighting::Style as SyntectStyle;
+use syntect::util::LinesWithEndings;
 use std::sync::{Mutex,Arc};
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use tui::{
@@ -13,11 +16,28 @@ use tui::{
     buffer::Buffer as TuiBuffer,
     widgets::Widget,
 };
+use compressed_string::ComprString;
+use std::ops::Deref;
 
 #[derive(Debug, Copy, Clone)]
 pub struct WindowPosition {
     pub y: u32,
     pub x: u32,
+}
+
+#[derive(Clone)]
+pub struct CachedSpan {
+    pub content: ComprString,
+    pub style: Style
+}
+
+impl<'a> From<Span<'a>> for CachedSpan {
+    fn from(span: Span) -> Self {
+        CachedSpan {
+            content: ComprString::new(span.content.deref()),
+            style: span.style
+        }
+    }
 }
 
 #[derive(Default, Clone, MessageResponse)]
@@ -42,7 +62,8 @@ pub struct Window {
     pub window_right: Option<Uuid>,
     pub window_up: Option<Uuid>,
     pub window_down: Option<Uuid>,
-    pub terminal: Option<Arc<Mutex<Term>>>,
+    pub highlight_cache: Vec<Vec<CachedSpan>>,
+    pub line_num_cache: Vec<Vec<CachedSpan>>,
 }
 
 impl Widget for Window {
@@ -88,6 +109,33 @@ impl Widget for Window {
 }
 
 impl Window {
+    pub fn convert_style(style: SyntectStyle) -> Style {
+        Style::default().fg(Color::Rgb(
+            style.foreground.r,
+            style.foreground.g,
+            style.foreground.b,
+        ))
+    }
+
+    pub fn to_span(style: SyntectStyle, value: &str) -> CachedSpan {
+        CachedSpan {
+            content: ComprString::new(value),
+            style: Self::convert_style(style)
+        }
+    }
+
+    pub fn to_spans(highlights: Vec<(SyntectStyle, &str)>) -> Spans {
+        todo!("convert from vec to spans");
+        /*
+        Spans::from(
+            highlights
+                .iter()
+                .map(|h| Self::to_span(h.0, h.1))
+                .collect::<Vec<Span>>(),
+        )
+        */
+    }
+
     pub fn draw<'a,B: 'a> (main_area: Option<Rect>,f: &mut Frame<'a,B>) 
         where 
             B: Backend
@@ -99,8 +147,6 @@ impl Window {
                 .split(area);
             let line_number_area = inner_text_splits[0];
             let text_area = inner_text_splits[1];
-            //let tmp_term = self.terminal.clone().unwrap();
-            //let mut term_lock = tmp_term.lock().map_err(|e| AnyHowError::msg(format!("{:?}",e))).unwrap();
             let paragraph = Paragraph::new(Spans::from(vec![Span::raw("hello world")]))
                 .alignment(Alignment::Left)
                 .wrap(Wrap { trim: false });
@@ -112,7 +158,6 @@ impl Window {
 
     pub fn new(buffer: &Buffer) -> Self {
             Self {
-                terminal: None,
                 id: Uuid::new_v4(),
                 buffer_id: buffer.id,
                 x_pos: buffer.x_pos,
@@ -154,6 +199,7 @@ impl Window {
         &mut self,
         token: DisplayToken,
     )  {
+        /*
         match token {
          DisplayToken::DrawWindow => {
                 let main_area = self.area;
@@ -163,6 +209,7 @@ impl Window {
          },
          _ => ()
         };
+        */
         ()
     }
 }

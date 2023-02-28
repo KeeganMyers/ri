@@ -21,6 +21,7 @@ actix = "0.13.0"
 actix-rt = "2.8.0"
 #ra_ap_rust-analyzer = "0.0.141"
 crossterm = "0.26.0"
+compressed_string = "1.0.0"
 
 #![feature(alloc_system)]
 #![feature(global_allocator, allocator_api)]

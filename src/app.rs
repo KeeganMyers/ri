@@ -58,7 +58,6 @@ impl Actor for App {
             let window_id = window.id.clone();
 
             window.area = Some(ui.text_area.clone());
-            window.terminal = Some(self.terminal.clone());
             let ui_addr = ui.start();
             self.buffers.insert(buffer.id, buffer.start());
             self.windows.insert(window.id, window.start());
@@ -246,11 +245,9 @@ impl Handler<Token> for App {
         if let Some(buffer) = self.buffers.get(&self.current_buffer_id) {
             let _ = buffer.send(msg.clone());
         }
-        /*
         if let Some(window) = self.windows.get(&self.current_window_id) {
             let _ = window.send(msg.clone());
         }
-        */
         let _ = self.ui.as_ref().and_then(|ui| Some(ui.send(msg.clone())));
         let _ = self.handle_token(msg);
         ()
