@@ -6,9 +6,6 @@ use crossterm::event::KeyEvent as Key;
 use tui::layout::Direction;
 use uuid::Uuid;
 use crate::window::Window;
-use std::collections::HashMap;
-use crate::ui::Term;
-use tui::layout::Rect;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WindowChange {

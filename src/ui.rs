@@ -1,26 +1,8 @@
-use crate::{token::{display_token::*, command_token::*,normal_token::*, Token}};
+use crate::{token::{display_token::*, Token}};
+//use crate::{token::{display_token::*, command_token::*,normal_token::*, Token}};
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use crate::Window;
 use std::sync::{Mutex,Arc};
-use ropey::Rope;
-use std::collections::HashMap;
-use std::io::{stdout};
-use syntect::easy::HighlightLines;
-use syntect::highlighting::Style as SyntectStyle;
-use syntect::util::LinesWithEndings;
-use crossterm::terminal::ClearType;
-use crossterm::{event,  terminal}; 
-use syntect::{
-    highlighting::{Theme, ThemeSet},
-    parsing::{SyntaxReference, SyntaxSet},
-};
-use crossterm::{
-    cursor::position,
-    event::{DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
-    execute,
-    terminal::{disable_raw_mode, enable_raw_mode},
-    Result,
-};
 use std::io::Stdout;
 use actix::prelude::*;
 
@@ -28,7 +10,6 @@ use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    text::{Span, Spans},
     widgets::{Block, Paragraph, Wrap},
     Frame, Terminal,
 };
@@ -39,17 +20,11 @@ pub type Term = Terminal<CrosstermBackend<Stdout>>;
 pub struct Ui {
     pub app: Option<Recipient<Token>>,
     pub should_quit: bool,
-    pub syntax_set: Option<SyntaxSet>,
-    pub theme_set: Option<ThemeSet>,
-    pub theme: Option<Theme>,
-    pub syntax: Option<SyntaxReference>,
     pub current_window_id: Uuid,
     pub head_area: Rect,
     pub text_area: Rect,
     pub foot_area: Rect,
     pub terminal: Option<Arc<Mutex<Term>>>
-    //pub highlight_cache: HashMap<Uuid, Vec<Spans<'a>>>,
-    //pub line_num_cache: HashMap<Uuid, Spans<'a>>,
 }
 
 
@@ -58,36 +33,7 @@ impl Actor for Ui {
 }
 
 impl Ui {
-    pub fn convert_style(style: SyntectStyle) -> Style {
-        Style::default().fg(Color::Rgb(
-            style.foreground.r,
-            style.foreground.g,
-            style.foreground.b,
-        ))
-    }
-
-    pub fn to_span(style: SyntectStyle, value: &str) -> Span {
-        Span::styled(value, Self::convert_style(style))
-    }
-
-    pub fn to_spans(highlights: Vec<(SyntectStyle, &str)>) -> Spans {
-        Spans::from(
-            highlights
-                .iter()
-                .map(|h| Self::to_span(h.0, h.1))
-                .collect::<Vec<Span>>(),
-        )
-    }
-
-    pub fn line_number_spans(line_number_count: usize) -> Spans<'static> {
-        Spans::from(
-            (1..line_number_count)
-                .map(|l| Span::styled(format!("{:<5}", l), Style::default().fg(Color::Yellow)))
-                .collect::<Vec<Span>>(),
-        )
-    }
-
-    pub fn add_text_split(&mut self, direction: Direction) {
+    pub fn add_text_split(&mut self, _direction: Direction) {
         /*
         let text_area = if let Some(area) = self
             .windows
@@ -126,15 +72,15 @@ impl Ui {
         */
     }
 
-    pub fn remove_text_split(&mut self, window_id: Uuid) {
         /*
+    pub fn remove_text_split(&mut self, _window_id: Uuid) {
         if let Some(window) = self.windows.get_mut(&window_id) {
             window.area = window.outer_areas.pop().flatten();
             window.bottom = window.area.map(|a| a.bottom());
             window.right = window.area.map(|a| a.right());
         }
-        */
     }
+        */
 
     pub fn draw<'a,B: 'a> (head_area: Rect,foot_area: Rect, text_area: Rect,window_widgets: Vec<Window>,f: &mut Frame<'a,B>,) 
         where 
@@ -193,79 +139,9 @@ impl Ui {
         (area[0], area[1], area[2])
     }
 
-    async fn cache_formatted_text(&mut self, text: &Rope, id: Uuid) {
-        if let (Some(syntax), Some(theme)) = (&self.syntax, &self.theme) {
-            let mut highlight = HighlightLines::new(syntax, theme);
-            let mut spans: Vec<Spans> = vec![];
-            let rope_str = text.to_string();
-            let text_lines = LinesWithEndings::from(Box::leak(Box::new(rope_str)));
-            for line in text_lines {
-                if let Ok(hs) = highlight.highlight_line(line, &self.syntax_set.clone().unwrap()) {
-                    spans.push(Self::to_spans(hs.clone()));
-                }
-            }
-            unimplemented!();
-            //self.highlight_cache.insert(id, spans.clone());
-        }
-    }
 
-    async fn cache_new_line(&mut self, text: &Rope, id: Uuid, line_index: usize) {
-        if let (Some(syntax), Some(theme)) = (&self.syntax, &self.theme) {
-            let mut highlight = HighlightLines::new(syntax, theme);
-            let rope_str = text
-                .get_line(line_index)
-                .map(|l| l.to_string())
-                .unwrap_or_default();
-            let mut text_line = LinesWithEndings::from(Box::leak(Box::new(rope_str)));
-            if let Some(line) = &text_line.nth(0) {
-            unimplemented!();
-                /*
-                if let Ok(hs) = highlight.highlight_line(line, &self.syntax_set.clone().unwrap()) {
-                    if let Some(cache) = self.highlight_cache.get_mut(&id) {
-                        cache.insert(line_index, Self::to_spans(hs.clone()));
-                    }
-                }
-                */
-            }
-        }
-    }
 
-    async fn cache_current_line(&mut self, text: &Rope, id: Uuid, line_index: usize) {
-        if let (Some(syntax), Some(theme)) = (&self.syntax, &self.theme) {
-            let mut highlight = HighlightLines::new(syntax, theme);
-            let rope_str = text
-                .get_line(line_index)
-                .map(|l| l.to_string())
-                .unwrap_or_default();
-            let mut text_line = LinesWithEndings::from(Box::leak(Box::new(rope_str)));
-            if let Some(line) = &text_line.nth(0) {
-                if let Ok(hs) = highlight.highlight_line(line, &self.syntax_set.clone().unwrap()) {
-                    unimplemented!();
-                    /*
-                    if let Some(cache) = self.highlight_cache.get_mut(&id) {
-                        cache[line_index] = Self::to_spans(hs.clone());
-                    }
-                    */
-                }
-            }
-        }
-    }
 
-    async fn remove_cache_line(&mut self, id: Uuid, line_index: usize) {
-        unimplemented!();
-        /*
-        if let Some(cache) = self.highlight_cache.get_mut(&id) {
-            cache.remove(line_index);
-        }
-        */
-    }
-
-    async fn cache_line_numbers(&mut self, text: &Rope, id: Uuid) {
-        let line_count = text.len_lines();
-        let local_line_nums = Self::line_number_spans(line_count);
-        unimplemented!();
-        //self.line_num_cache.insert(id, local_line_nums.clone());
-    }
 
 
     fn draw_footer<B>(window: Option<Window>, f: &mut Frame<B>, area: Rect)
@@ -307,7 +183,7 @@ impl Ui {
     {
         let block = Block::default().style(Style::default().fg(Color::Black).bg(Color::White));
         let paragraph =
-            Paragraph::new(window.map(|w| w.title.clone()).unwrap_or_default()).block(block);
+            Paragraph::new(window.and_then(|w| w.title.clone()).unwrap_or_default()).block(block);
         f.render_widget(paragraph, area);
     }
 
@@ -325,10 +201,6 @@ impl Ui {
         let ui = Self {
             app: Some(app),
             should_quit: false,
-            syntax_set: None,
-            theme_set: None,
-            theme: None,
-            syntax: None,
             current_window_id: Uuid::new_v4(),
             head_area,
             text_area,
@@ -348,24 +220,12 @@ impl Ui {
                 let head_area = self.head_area.clone();
                 let foot_area = self.foot_area.clone();
                 let text_area = self.text_area.clone();
-                let current_window_id = self.current_window_id.clone();
+                let _current_window_id = self.current_window_id.clone();
                 if let Some(mut term) = self.terminal.as_ref().and_then(|t| t.lock().ok()) {
                     let _ = term.draw(|f| Self::draw(head_area,foot_area,text_area,window_widgets,f));
                 }
             }
-            DisplayToken::SetHighlight => {
-                let ps = SyntaxSet::load_defaults_newlines();
-                let ts = ThemeSet::load_defaults();
-                let syntax = ps.find_syntax_by_extension("rs").clone();
-                let theme = ts.themes["base16-ocean.dark"].clone();
-                self.syntax_set = Some(ps.clone());
-                self.theme_set = Some(ts);
-                if let Some(s) = syntax {
-                    self.syntax = Some(s.clone());
-                }
-                self.theme = Some(theme);
-            }
-            DisplayToken::NewWindow(change, direction) => {
+            DisplayToken::NewWindow(_change, _direction) => {
                 /*
                 let right_offset = self
                     .windows
@@ -420,7 +280,7 @@ impl Ui {
             DisplayToken::SetTextLayout(direction) => {
                 self.add_text_split(direction);
             }
-            DisplayToken::UpdateWindow(change) => {
+            DisplayToken::UpdateWindow(_change) => {
                 /*
                 let right_offset = self
                     .windows
@@ -448,11 +308,11 @@ impl Ui {
                 }
                 */
             }
-            DisplayToken::CacheWindowContent(id, text) => {
+            DisplayToken::CacheWindowContent(_id, _text) => {
                 //self.cache_formatted_text(&text, id).await;
                 //self.cache_line_numbers(&text, id).await;
             }
-            DisplayToken::CloseWindow(id) => {
+            DisplayToken::CloseWindow(_id) => {
                 /*
                 let current_windows = self.windows.clone();
                 let current_window = current_windows.get(&id);
@@ -510,18 +370,18 @@ impl Ui {
                 }
                 */
             }
-            DisplayToken::CacheCurrentLine(id, text, line_index) => {
+            DisplayToken::CacheCurrentLine(_id, _text, _line_index) => {
                 //self.cache_current_line(&text, id, line_index).await;
             }
-            DisplayToken::CacheNewLine(id, text, line_index) => {
+            DisplayToken::CacheNewLine(_id, _text, _line_index) => {
                 //self.cache_new_line(&text, id, line_index).await;
                 //self.cache_line_numbers(&text, id).await;
             }
-            DisplayToken::RemoveCacheLine(id, text, line_index) => {
+            DisplayToken::RemoveCacheLine(_id, _text,_line_index) => {
                 //self.remove_cache_line(id, line_index).await;
                 //self.cache_line_numbers(&text, id).await;
             }
-            DisplayToken::AppendCommand(id, command) => {
+            DisplayToken::AppendCommand(_id, _command) => {
                 /*
                 if let Some(window) = self.windows.get_mut(&id) {
                     window.command_text = command;
@@ -533,7 +393,7 @@ impl Ui {
 
         Ok(vec![])
     }
-
+    /*
     async fn handle_command_token(
         &mut self,
        // _terminal: &mut Term,
@@ -548,7 +408,9 @@ impl Ui {
         };
         Ok(vec![])
     }
+    */
 
+                /*
     async fn handle_normal_token(
         &mut self,
         //terminal: &mut Term,
@@ -556,13 +418,11 @@ impl Ui {
     ) -> AnyHowResult<Vec<Token>> {
         match token {
             NormalToken::WindowLeft => {
-                /*
                 if let Some(window_id) = self
                     .windows
                     .get(&self.current_window_id)
                     .and_then(|w| w.window_left)
                 {
-                    /*
                     if let Some(target_window) = self.windows.get(&window_id) {
                         self.current_window_id = window_id;
                         let _ = terminal.draw(|f| self.draw(f));
@@ -570,19 +430,15 @@ impl Ui {
                             target_window.buffer_id,
                         ))]);
                     }
-                    */
                 }
-            */
                 Ok(vec![])
             }
             NormalToken::WindowRight => {
-                /*
                 if let Some(window_id) = self
                     .windows
                     .get(&self.current_window_id)
                     .and_then(|w| w.window_right)
                 {
-                    /*
                     if let Some(target_window) = self.windows.get(&window_id) {
                         self.current_window_id = window_id;
                         let _ = terminal.draw(|f| self.draw(f));
@@ -590,13 +446,10 @@ impl Ui {
                             target_window.buffer_id,
                         ))]);
                     }
-                    */
                 }
-            */
                 Ok(vec![])
             }
             NormalToken::WindowUp => {
-                /*
                 if let Some(window_id) = self
                     .windows
                     .get(&self.current_window_id)
@@ -609,11 +462,9 @@ impl Ui {
                         ))]);
                     }
                 }
-                */
                 Ok(vec![])
             }
             NormalToken::WindowDown => {
-                /*
                 if let Some(window_id) = self
                     .windows
                     .get(&self.current_window_id)
@@ -626,12 +477,12 @@ impl Ui {
                         ))]);
                     }
                 }
-                */
                 Ok(vec![])
             }
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
         }
     }
+    */
 }
 
     impl Handler<Token> for Ui {
@@ -640,7 +491,7 @@ impl Ui {
         fn handle(&mut self, msg: Token , _ctx: &mut Context<Self>) -> Self::Result {
             match msg {
                 Token::Display(t) => {
-                    self.handle_display_token(t);
+                    let _ = self.handle_display_token(t);
                     ()
                 },
                 /*

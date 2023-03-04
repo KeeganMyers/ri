@@ -18,6 +18,8 @@ use tui::{Terminal,layout::Direction,backend::CrosstermBackend};
 use crossterm::{event::EnableMouseCapture,execute,terminal,terminal::{enable_raw_mode,disable_raw_mode,ClearType}};
 use std::io::stdout;
 use uuid::Uuid;
+use log::trace;
+use id_tree::{InsertBehavior::*,Tree, TreeBuilder,Node};
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub enum Mode {
@@ -39,6 +41,7 @@ pub struct App {
     pub buffers: HashMap<Uuid, Addr<Buffer>>,
     pub ui: Option<Addr<Ui>>,
     pub windows: HashMap<Uuid, Addr<Window>>,
+    pub window_layout: Tree<Uuid>,
     pub current_window_id: Uuid,
     pub current_buffer_id: Uuid,
     pub should_quit: bool,
@@ -51,23 +54,38 @@ impl Actor for App {
 
     fn started(&mut self, ctx: &mut Context<Self>) {
         let addr = ctx.address().recipient();
-        if let Ok(ui) =  Ui::new(addr,self.terminal.clone()) {
-            let buffer = Buffer::new(self.current_file.clone()).unwrap();
-            let mut window = Window::new(&buffer);
+        if let Ok(ui) =  Ui::new(addr.clone(),self.terminal.clone()) {
+            let buffer = Buffer::new(addr,self.current_file.clone()).unwrap();
+            let mut window = Window::new(& WindowChange {
+                id: buffer.id,
+                x_pos: buffer.x_pos,
+                y_pos: buffer.y_pos,
+                mode: buffer.mode.clone(),
+                title: Some(buffer.title.clone()),
+                page_size: buffer.page_size,
+                current_page: buffer.current_page,
+                ..WindowChange::default()
+            });
             let buff_id = buffer.id.clone();
             let window_id = window.id.clone();
 
             window.area = Some(ui.text_area.clone());
             let ui_addr = ui.start();
-            self.buffers.insert(buffer.id, buffer.start());
-            self.windows.insert(window.id, window.start());
+            let window_addr = window.start();
+            let buffer_addr = buffer.clone().start();
+            let _ = self.window_layout.insert(Node::new(window_id),AsRoot);
+            self.buffers.insert(buffer.id, buffer_addr.clone());
+            self.windows.insert(window_id, window_addr.clone());
             self.current_buffer_id = buff_id;
             self.current_window_id = window_id;
 
             self.ui = Some(ui_addr.clone());
-            let _ = ui_addr.try_send(Token::Display(DisplayToken::SetHighlight));
-            let _ = ui_addr.try_send(Token::Display(DisplayToken::SetTextLayout(Direction::Horizontal)));
-            
+            let _ = window_addr.try_send(Token::Display(DisplayToken::SetHighlight));
+            let _ = window_addr.try_send(Token::Display(DisplayToken::CacheWindowContent(
+                            buffer.id,
+                            buffer.text.clone(),
+                        )));
+            let _ = buffer_addr.try_send(Token::Command(CommandToken::SetBufferWindow(window_addr.clone().recipient())));
             let windows = self.windows.clone();
             async move {
             let _ = Self::render_ui(&ui_addr,&windows).await;
@@ -97,7 +115,8 @@ impl App {
         execute!(stdout, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
-        let  terminal_arc = Arc::new(Mutex::new(terminal));
+        let window_layout: Tree<Uuid> = Tree::new();
+        let terminal_arc = Arc::new(Mutex::new(terminal));
         let buff_map = HashMap::new();
         let window_map = HashMap::new();
         Ok(Self {
@@ -105,6 +124,7 @@ impl App {
             windows: window_map,
             buffers: buff_map,
             current_file: file_name,
+            window_layout,
             should_quit: false,
             current_buffer_id: Uuid::new_v4(),
             current_window_id: Uuid::new_v4(),
@@ -131,6 +151,7 @@ impl App {
             }
             CommandToken::TabNew => Ok(vec![]),
             CommandToken::Split(f_name) => {
+                /*
                 if let Some(file_name) = f_name {
                     let buffer = if let Ok(buffer) = Buffer::new(Some(file_name.trim().to_string()))
                     {
@@ -165,8 +186,11 @@ impl App {
                 } else {
                     Ok(vec![])
                 }
+                */
+                Ok(vec![])
             }
             CommandToken::VerticalSplit(f_name) => {
+                /*
                 if let Some(file_name) = f_name {
                     let buffer = if let Ok(buffer) = Buffer::new(Some(file_name.trim().to_string()))
                     {
@@ -201,6 +225,8 @@ impl App {
                 } else {
                     Ok(vec![])
                 }
+                */
+                Ok(vec![])
             }
             CommandToken::Enter => {
                 if let Some(buffer) = self.buffers.get_mut(&self.current_buffer_id) {
@@ -230,26 +256,50 @@ impl App {
         }
     }
 
-    pub fn handle_token(&mut self, token: Token) -> AnyHowResult<Vec<Token>> {
+    pub fn handle_display_token(&mut self, token: DisplayToken,ctx: &mut Context<Self>) -> AnyHowResult<Vec<Token>> {
+        trace!("calling display handle token");
         match token {
+            DisplayToken::DrawViewPort(_) => {
+                trace!("app attempting to handle DrawViewPort");
+                if let Some(ui) = self.ui.clone() {
+                    let windows = self.windows.clone();
+                    async move {
+                        let _ = Self::render_ui(&ui,&windows).await;
+                    }.into_actor(self)
+                    .wait(ctx);
+                }
+            },
+            _ => ()
+        };
+        Ok(vec![])
+    }
+
+    pub fn handle_token(&mut self, token: Token,ctx: &mut Context<Self>) -> AnyHowResult<Vec<Token>> {
+        trace!("calling handle token");
+        let _ = match token {
             Token::Command(t) => self.handle_command_token(t),
+            Token::Display(t) => {
+                trace!("in display match");
+                self.handle_display_token(t,ctx)
+            },
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
-        }
+        };
+        Ok(vec![])
     }
 }
 
 impl Handler<Token> for App {
     type Result = ();
 
-    fn handle(&mut self, msg: Token , _ctx: &mut Context<Self>) -> Self::Result {
+    fn handle(&mut self, msg: Token , ctx: &mut Context<Self>) -> Self::Result {
         if let Some(buffer) = self.buffers.get(&self.current_buffer_id) {
-            let _ = buffer.send(msg.clone());
+            let _ = buffer.try_send(msg.clone());
         }
         if let Some(window) = self.windows.get(&self.current_window_id) {
-            let _ = window.send(msg.clone());
+            let _ = window.try_send(msg.clone());
         }
         let _ = self.ui.as_ref().and_then(|ui| Some(ui.send(msg.clone())));
-        let _ = self.handle_token(msg);
+        let _ = self.handle_token(msg,ctx);
         ()
     }
 }

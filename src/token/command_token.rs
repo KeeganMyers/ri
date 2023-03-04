@@ -2,7 +2,8 @@ use anyhow::Error as AnyHowError;
 use std::{convert::TryFrom, iter::Iterator};
 use crossterm::event::{KeyCode,KeyEvent as Key};
 use uuid::Uuid;
-use crate::app::Mode;
+use crate::{Token,app::Mode};
+use actix::prelude::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CommandToken {
@@ -19,6 +20,7 @@ pub enum CommandToken {
     Esc,
     Enter,
     SetBuffer(Uuid),
+    SetBufferWindow(Recipient<Token>)
 }
 
 pub const PARSE_FAILURE_ERR: &'static str = "Unknown Token";

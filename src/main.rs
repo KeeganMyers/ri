@@ -1,6 +1,7 @@
 mod app;
 mod buffer;
 pub mod token;
+pub mod reflow;
 mod ui;
 mod window;
 mod parser;
