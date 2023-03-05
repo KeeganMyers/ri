@@ -369,4 +369,3 @@ impl Handler<GetState> for Window {
             self.clone()
         }
 }
-
