@@ -88,7 +88,7 @@ impl Actor for App {
             let _ = buffer_addr.try_send(Token::Command(CommandToken::SetBufferWindow(window_addr.clone().recipient())));
             let windows = self.windows.clone();
             async move {
-            let _ = Self::render_ui(&ui_addr,&windows).await;
+            let _ = Self::render_ui(window_id,&ui_addr,&windows).await;
             }.into_actor(self)
             .wait(ctx)
         }
@@ -96,7 +96,7 @@ impl Actor for App {
 }
 
 impl App {
-    pub async fn render_ui(ui: &Addr<Ui>, windows: &HashMap<Uuid,Addr<Window>>) -> AnyHowResult<()> {
+    pub async fn render_ui(current_window_id: Uuid,ui: &Addr<Ui>, windows: &HashMap<Uuid,Addr<Window>>) -> AnyHowResult<()> {
             let mut window_widgets: Vec<Window> = vec![];
             for window in windows.values() {
                 if let Ok(window_widget) = window.send(GetState {}).await {
@@ -104,7 +104,7 @@ impl App {
                 }
             }
 
-            let _ = ui.try_send(Token::Display(DisplayToken::DrawViewPort(window_widgets)));
+            let _ = ui.try_send(Token::Display(DisplayToken::DrawViewPort(current_window_id,window_widgets)));
         Ok(())
     }
 
@@ -259,12 +259,13 @@ impl App {
     pub fn handle_display_token(&mut self, token: DisplayToken,ctx: &mut Context<Self>) -> AnyHowResult<Vec<Token>> {
         trace!("calling display handle token");
         match token {
-            DisplayToken::DrawViewPort(_) => {
+            DisplayToken::DrawViewPort(_,_) => {
                 trace!("app attempting to handle DrawViewPort");
                 if let Some(ui) = self.ui.clone() {
                     let windows = self.windows.clone();
+                    let window_id = self.current_window_id.clone();
                     async move {
-                        let _ = Self::render_ui(&ui,&windows).await;
+                        let _ = Self::render_ui(window_id,&ui,&windows).await;
                     }.into_actor(self)
                     .wait(ctx);
                 }

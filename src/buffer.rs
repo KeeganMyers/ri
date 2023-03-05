@@ -552,7 +552,7 @@ impl Buffer {
                 })));
         }
         trace!("calling app display token");
-        let _ = self.app.try_send(Token::Display(DisplayToken::DrawViewPort(vec![])));
+        let _ = self.app.try_send(Token::Display(DisplayToken::DrawViewPort(self.id,vec![])));
     }
 
     pub fn handle_normal_token(&mut self, token: NormalToken) -> AnyHowResult<Vec<Token>> {

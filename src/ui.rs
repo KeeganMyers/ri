@@ -82,11 +82,10 @@ impl Ui {
     }
         */
 
-    pub fn draw<'a,B: 'a> (head_area: Rect,foot_area: Rect, text_area: Rect,window_widgets: Vec<Window>,f: &mut Frame<'a,B>,) 
+    pub fn draw<'a,B: 'a> (current_window_id: Uuid,head_area: Rect,foot_area: Rect, text_area: Rect,window_widgets: Vec<Window>,f: &mut Frame<'a,B>,) 
         where 
             B: Backend
     {
-        //let current_window = windows.get(&current_window_id).cloned();
         Self::draw_header(
             None,
             f,
@@ -94,30 +93,13 @@ impl Ui {
         );
 
         for window in window_widgets {
-            f.render_widget(window,text_area)
-        }
-
-        /*
-        for window in windows.values() {
-             f.render_widget(window.clone(), f.size());
-
             if window.id == current_window_id {
-                let y_cursor = if window.display_y_pos() >= window.bottom.unwrap_or_default() {
-                    window.bottom.map(|b| b - 3).unwrap_or_default()
-                } else {
-                    window.display_y_pos()
-                };
-
-                let x_cursor = if window.display_x_pos() >= window.right.unwrap_or_default() {
-                    window.right.map(|r| r - 1).unwrap_or_default()
-                } else {
-                    window.display_x_pos()
-                };
-
-                f.set_cursor(x_cursor, y_cursor);
+                    f.set_cursor(window.cursor_x_pos(),window.cursor_y_pos());
             }
+
+            f.render_widget(window,text_area);
         }
-        */
+
         Self::draw_footer(
             None,
             f,
@@ -216,13 +198,13 @@ impl Ui {
         token: DisplayToken,
     ) -> AnyHowResult<Vec<Token>> {
         match token {
-            DisplayToken::DrawViewPort(window_widgets) => {
+            DisplayToken::DrawViewPort(current_window_id,window_widgets) => {
                 let head_area = self.head_area.clone();
                 let foot_area = self.foot_area.clone();
                 let text_area = self.text_area.clone();
                 let _current_window_id = self.current_window_id.clone();
                 if let Some(mut term) = self.terminal.as_ref().and_then(|t| t.lock().ok()) {
-                    let _ = term.draw(|f| Self::draw(head_area,foot_area,text_area,window_widgets,f));
+                    let _ = term.draw(|f| Self::draw(current_window_id,head_area,foot_area,text_area,window_widgets,f));
                 }
             }
             DisplayToken::NewWindow(_change, _direction) => {

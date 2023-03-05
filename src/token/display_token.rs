@@ -24,7 +24,7 @@ pub enum DisplayToken {
     SetHighlight,
     UpdateWindow(WindowChange),
     NewWindow(WindowChange, Option<Direction>),
-    DrawViewPort(Vec<Window>),
+    DrawViewPort(Uuid,Vec<Window>),
     DrawWindow,
     SetTextLayout(Direction),
     CacheWindowContent(Uuid, Rope),

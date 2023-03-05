@@ -276,9 +276,25 @@ impl Window {
                 ..Window::default()
             }
     }
-
+    pub fn cursor_x_pos(&self) -> u16 {
+        let area = self.area.unwrap_or_default();
+        if self.display_x_pos() >= area.right() {
+            area.right() - 1
+        } else {
+            self.display_x_pos()
+        }
+    }
     pub fn display_x_pos(&self) -> u16 {
         self.x_pos + self.x_offset
+    }
+
+    pub fn cursor_y_pos(&self) -> u16 {
+        let area = self.area.unwrap_or_default();
+        if self.display_y_pos() >= area.bottom() {
+            area.bottom() - 3
+        } else {
+            self.display_y_pos()
+        }
     }
 
     pub fn display_y_pos(&self) -> u16 {
