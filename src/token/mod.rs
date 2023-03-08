@@ -6,10 +6,12 @@ pub mod normal_token;
 pub mod operator_token;
 pub mod range_token;
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
-use std::convert::TryFrom;
 use crossterm::event::KeyEvent as Key;
+use std::convert::TryFrom;
 
+use crate::window::Window;
 use crate::Mode;
+use actix::prelude::*;
 pub use append_token::*;
 pub use command_token::*;
 pub use display_token::*;
@@ -17,8 +19,6 @@ pub use insert_token::*;
 pub use normal_token::*;
 pub use operator_token::*;
 pub use range_token::*;
-use actix::prelude::*;
-use crate::window::Window;
 
 #[derive(Message)]
 #[rtype(result = "()")]

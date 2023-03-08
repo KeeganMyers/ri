@@ -1,10 +1,10 @@
-use crate::{token::{display_token::*, Token}};
+use crate::token::{display_token::*, Token};
 //use crate::{token::{display_token::*, command_token::*,normal_token::*, Token}};
-use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use crate::Window;
-use std::sync::{Mutex,Arc};
-use std::io::Stdout;
 use actix::prelude::*;
+use anyhow::{Error as AnyHowError, Result as AnyHowResult};
+use std::io::Stdout;
+use std::sync::{Arc, Mutex};
 
 use tui::{
     backend::{Backend, CrosstermBackend},
@@ -24,9 +24,8 @@ pub struct Ui {
     pub head_area: Rect,
     pub text_area: Rect,
     pub foot_area: Rect,
-    pub terminal: Option<Arc<Mutex<Term>>>
+    pub terminal: Option<Arc<Mutex<Term>>>,
 }
-
 
 impl Actor for Ui {
     type Context = Context<Self>;
@@ -72,7 +71,7 @@ impl Ui {
         */
     }
 
-        /*
+    /*
     pub fn remove_text_split(&mut self, _window_id: Uuid) {
         if let Some(window) = self.windows.get_mut(&window_id) {
             window.area = window.outer_areas.pop().flatten();
@@ -82,29 +81,27 @@ impl Ui {
     }
         */
 
-    pub fn draw<'a,B: 'a> (current_window_id: Uuid,head_area: Rect,foot_area: Rect, text_area: Rect,window_widgets: Vec<Window>,f: &mut Frame<'a,B>,) 
-        where 
-            B: Backend
+    pub fn draw<'a, B: 'a>(
+        current_window_id: Uuid,
+        head_area: Rect,
+        foot_area: Rect,
+        text_area: Rect,
+        window_widgets: Vec<Window>,
+        f: &mut Frame<'a, B>,
+    ) where
+        B: Backend,
     {
-        Self::draw_header(
-            None,
-            f,
-            head_area,
-        );
+        Self::draw_header(None, f, head_area);
 
         for window in window_widgets {
             if window.id == current_window_id {
-                    f.set_cursor(window.cursor_x_pos(),window.cursor_y_pos());
+                f.set_cursor(window.cursor_x_pos(), window.cursor_y_pos());
             }
 
-            f.render_widget(window,text_area);
+            f.render_widget(window, text_area);
         }
 
-        Self::draw_footer(
-            None,
-            f,
-            foot_area,
-        );
+        Self::draw_footer(None, f, foot_area);
     }
 
     fn create_layout<B: Backend>(frame: &Frame<B>) -> (Rect, Rect, Rect) {
@@ -121,18 +118,14 @@ impl Ui {
         (area[0], area[1], area[2])
     }
 
-
-
-
-
-
     fn draw_footer<B>(window: Option<Window>, f: &mut Frame<B>, area: Rect)
     where
         B: Backend,
     {
         let block = Block::default().style(Style::default().fg(Color::Black).bg(Color::White));
         let paragraph = Paragraph::new(
-            window.clone()
+            window
+                .clone()
                 .and_then(|w| w.command_text.clone())
                 .unwrap_or("".to_string()),
         )
@@ -169,16 +162,18 @@ impl Ui {
         f.render_widget(paragraph, area);
     }
 
-    pub fn new(app: Recipient<Token>,terminal: Arc<Mutex<Term>>) -> AnyHowResult<Self> {
-      /*
-        let _ = execute!(stdout(), terminal::Clear(ClearType::All));
-       let mut stdout = stdout();
-        execute!(stdout, EnableMouseCapture)?;
-        let backend = CrosstermBackend::new(stdout);
-        let mut terminal = Terminal::new(backend)?;
-      */
-        let  term_arc = terminal.clone();
-        let mut term_lock = term_arc.lock().map_err(|e| AnyHowError::msg(format!("{:?}",e)))?;
+    pub fn new(app: Recipient<Token>, terminal: Arc<Mutex<Term>>) -> AnyHowResult<Self> {
+        /*
+          let _ = execute!(stdout(), terminal::Clear(ClearType::All));
+         let mut stdout = stdout();
+          execute!(stdout, EnableMouseCapture)?;
+          let backend = CrosstermBackend::new(stdout);
+          let mut terminal = Terminal::new(backend)?;
+        */
+        let term_arc = terminal.clone();
+        let mut term_lock = term_arc
+            .lock()
+            .map_err(|e| AnyHowError::msg(format!("{:?}", e)))?;
         let (head_area, text_area, foot_area) = Ui::create_layout(&term_lock.get_frame());
         let ui = Self {
             app: Some(app),
@@ -193,18 +188,24 @@ impl Ui {
         Ok(ui)
     }
 
-    fn handle_display_token(
-        &mut self,
-        token: DisplayToken,
-    ) -> AnyHowResult<Vec<Token>> {
+    fn handle_display_token(&mut self, token: DisplayToken) -> AnyHowResult<Vec<Token>> {
         match token {
-            DisplayToken::DrawViewPort(current_window_id,window_widgets) => {
+            DisplayToken::DrawViewPort(current_window_id, window_widgets) => {
                 let head_area = self.head_area.clone();
                 let foot_area = self.foot_area.clone();
                 let text_area = self.text_area.clone();
                 let _current_window_id = self.current_window_id.clone();
                 if let Some(mut term) = self.terminal.as_ref().and_then(|t| t.lock().ok()) {
-                    let _ = term.draw(|f| Self::draw(current_window_id,head_area,foot_area,text_area,window_widgets,f));
+                    let _ = term.draw(|f| {
+                        Self::draw(
+                            current_window_id,
+                            head_area,
+                            foot_area,
+                            text_area,
+                            window_widgets,
+                            f,
+                        )
+                    });
                 }
             }
             DisplayToken::NewWindow(_change, _direction) => {
@@ -261,38 +262,6 @@ impl Ui {
             }
             DisplayToken::SetTextLayout(direction) => {
                 self.add_text_split(direction);
-            }
-            DisplayToken::UpdateWindow(_change) => {
-                /*
-                let right_offset = self
-                    .windows
-                    .get(&change.id)
-                    .and_then(|w| w.window_left)
-                    .and_then(|w| self.windows.get(&w))
-                    .and_then(|w| w.right)
-                    .unwrap_or_default();
-                let top_offset = self
-                    .windows
-                    .get(&change.id)
-                    .and_then(|w| w.window_up)
-                    .and_then(|w| self.windows.get(&w))
-                    .and_then(|w| w.bottom)
-                    .unwrap_or(self.text_area.top());
-                if let Some(window) = self.windows.get_mut(&change.id) {
-                    window.x_pos = change.x_pos;
-                    window.y_pos = change.y_pos;
-                    window.mode = change.mode;
-                    window.title = change.title.unwrap_or_default();
-                    window.page_size = change.page_size;
-                    window.current_page = change.current_page;
-                    window.y_offset = top_offset;
-                    window.x_offset = 4 + right_offset;
-                }
-                */
-            }
-            DisplayToken::CacheWindowContent(_id, _text) => {
-                //self.cache_formatted_text(&text, id).await;
-                //self.cache_line_numbers(&text, id).await;
             }
             DisplayToken::CloseWindow(_id) => {
                 /*
@@ -352,24 +321,6 @@ impl Ui {
                 }
                 */
             }
-            DisplayToken::CacheCurrentLine(_id, _text, _line_index) => {
-                //self.cache_current_line(&text, id, line_index).await;
-            }
-            DisplayToken::CacheNewLine(_id, _text, _line_index) => {
-                //self.cache_new_line(&text, id, line_index).await;
-                //self.cache_line_numbers(&text, id).await;
-            }
-            DisplayToken::RemoveCacheLine(_id, _text,_line_index) => {
-                //self.remove_cache_line(id, line_index).await;
-                //self.cache_line_numbers(&text, id).await;
-            }
-            DisplayToken::AppendCommand(_id, _command) => {
-                /*
-                if let Some(window) = self.windows.get_mut(&id) {
-                    window.command_text = command;
-                }
-                */
-            }
             _ => (),
         };
 
@@ -392,7 +343,7 @@ impl Ui {
     }
     */
 
-                /*
+    /*
     async fn handle_normal_token(
         &mut self,
         //terminal: &mut Term,
@@ -467,27 +418,27 @@ impl Ui {
     */
 }
 
-    impl Handler<Token> for Ui {
-        type Result = ();
+impl Handler<Token> for Ui {
+    type Result = ();
 
-        fn handle(&mut self, msg: Token , _ctx: &mut Context<Self>) -> Self::Result {
-            match msg {
-                Token::Display(t) => {
-                    let _ = self.handle_display_token(t);
-                    ()
-                },
-                /*
-                Token::Command(t) => {
-                    self.handle_command_token(&mut self.terminal, t);
-                    ()
-                },
-                Token::Normal(t) => {
-                    self.handle_normal_token(&mut self.terminal, t);
-                    ()
-                },
-                */
-                _ => (),
+    fn handle(&mut self, msg: Token, _ctx: &mut Context<Self>) -> Self::Result {
+        match msg {
+            Token::Display(t) => {
+                let _ = self.handle_display_token(t);
+                ()
             }
-            ()
+            /*
+            Token::Command(t) => {
+                self.handle_command_token(&mut self.terminal, t);
+                ()
+            },
+            Token::Normal(t) => {
+                self.handle_normal_token(&mut self.terminal, t);
+                ()
+            },
+            */
+            _ => (),
         }
+        ()
     }
+}

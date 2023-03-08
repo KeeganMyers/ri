@@ -1,6 +1,6 @@
 use anyhow::Error as AnyHowError;
+use crossterm::event::{KeyCode, KeyEvent as Key};
 use std::{convert::TryFrom, iter::Iterator};
-use crossterm::event::{KeyCode,KeyEvent as Key};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum NormalToken {

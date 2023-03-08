@@ -1,31 +1,37 @@
-use crate::{reflow::{LineComposer,WordWrapper},Buffer,app::Mode, ui::Term,token::{display_token::*, command_token::*,normal_token::*, Token,GetState}};
-use uuid::Uuid;
-use ropey::Rope;
+use crate::{
+    app::Mode,
+    reflow::{LineComposer, WordWrapper},
+    token::{command_token::*, display_token::*, normal_token::*, GetState, Token},
+    ui::Term,
+    Buffer,
+};
 use actix::prelude::*;
+use anyhow::{Error as AnyHowError, Result as AnyHowResult};
+use ropey::Rope;
+use std::iter;
+use std::sync::{Arc, Mutex};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::Style as SyntectStyle;
 use syntect::util::LinesWithEndings;
-use std::sync::{Mutex,Arc};
-use anyhow::{Error as AnyHowError, Result as AnyHowResult};
-use std::iter;
 use syntect::{
     highlighting::{Theme, ThemeSet},
     parsing::{SyntaxReference, SyntaxSet},
 };
 use tui::{
     backend::{Backend, CrosstermBackend},
+    buffer::Buffer as TuiBuffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    text::{StyledGrapheme,Span, Spans},
+    text::{Span, Spans, StyledGrapheme},
+    widgets::Widget,
     widgets::{Block, Paragraph, Wrap},
     Frame, Terminal,
-    buffer::Buffer as TuiBuffer,
-    widgets::Widget,
 };
+use uuid::Uuid;
 
-use unicode_width::UnicodeWidthStr;
 use compressed_string::ComprString;
 use std::ops::Deref;
+use unicode_width::UnicodeWidthStr;
 
 #[derive(Debug, Copy, Clone)]
 pub struct WindowPosition {
@@ -36,14 +42,14 @@ pub struct WindowPosition {
 #[derive(Clone)]
 pub struct CachedSpan {
     pub content: ComprString,
-    pub style: Style
+    pub style: Style,
 }
 
 impl CachedSpan {
     fn raw(content: &str) -> Self {
         CachedSpan {
             content: ComprString::from(content),
-            style: Style::default()
+            style: Style::default(),
         }
     }
 }
@@ -52,12 +58,12 @@ impl<'a> From<&CachedSpan> for Span<'a> {
     fn from(span: &CachedSpan) -> Self {
         Span {
             content: span.content.to_string().into(),
-            style: span.style
+            style: span.style,
         }
     }
 }
 
-#[derive(Default, Clone,MessageResponse)]
+#[derive(Default, Clone, MessageResponse)]
 pub struct Window {
     pub id: Uuid,
     pub title: Option<String>,
@@ -96,19 +102,33 @@ impl Widget for Window {
                 .split(area);
             let line_number_area = inner_text_splits[0];
             let text_area = inner_text_splits[1];
-            let spans = self.highlight_cache.iter()
-                        .map(|outer| Spans::from(outer.iter()
-                                .map(|inner| inner.deref().into())
-                                .collect::<Vec<Span>>()))
-                        .collect::<Vec<Spans>>();
+            let spans = self
+                .highlight_cache
+                .iter()
+                .map(|outer| {
+                    Spans::from(
+                        outer
+                            .iter()
+                            .map(|inner| inner.deref().into())
+                            .collect::<Vec<Span>>(),
+                    )
+                })
+                .collect::<Vec<Spans>>();
 
-            let line_number_spans = self.line_num_cache.iter()
-                        .map(|outer| Spans::from(outer.iter()
-                                .map(|inner| inner.deref().into())
-                                .collect::<Vec<Span>>()))
-                        .collect::<Vec<Spans>>();
-            self.render_text(line_number_area,line_number_spans,buf);
-            self.render_text(text_area,spans,buf);
+            let line_number_spans = self
+                .line_num_cache
+                .iter()
+                .map(|outer| {
+                    Spans::from(
+                        outer
+                            .iter()
+                            .map(|inner| inner.deref().into())
+                            .collect::<Vec<Span>>(),
+                    )
+                })
+                .collect::<Vec<Spans>>();
+            self.render_text(line_number_area, line_number_spans, buf);
+            self.render_text(text_area, spans, buf);
         }
     }
 }
@@ -125,18 +145,18 @@ impl Window {
     fn to_cached_span(style: SyntectStyle, value: &str) -> CachedSpan {
         CachedSpan {
             content: ComprString::new(value),
-            style: Self::convert_style(style)
+            style: Self::convert_style(style),
         }
     }
 
     fn to_spans(highlights: Vec<(SyntectStyle, &str)>) -> Vec<CachedSpan> {
-            highlights
-                .iter()
-                .map(|h| Self::to_cached_span(h.0, h.1))
-                .collect::<Vec<CachedSpan>>()
+        highlights
+            .iter()
+            .map(|h| Self::to_cached_span(h.0, h.1))
+            .collect::<Vec<CachedSpan>>()
     }
-    
-    fn cache_formatted_text(&mut self, text: &Rope, _id: Uuid) {
+
+    fn cache_formatted_text(&mut self, text: &Rope) {
         if let (Some(syntax), Some(theme)) = (&self.syntax, &self.theme) {
             let mut highlight = HighlightLines::new(syntax, theme);
             let mut spans: Vec<Vec<CachedSpan>> = vec![];
@@ -151,13 +171,13 @@ impl Window {
         }
     }
 
-    fn cache_line_numbers(&mut self, text: &Rope, id: Uuid) {
+    fn cache_line_numbers(&mut self, text: &Rope) {
         let line_count = text.len_lines();
         let local_line_nums = Self::line_numbers(line_count);
         self.line_num_cache = local_line_nums.clone();
     }
 
-    fn cache_new_line(&mut self, text: &Rope, id: Uuid, line_index: usize) {
+    fn cache_new_line(&mut self, text: &Rope, line_index: usize) {
         if let (Some(syntax), Some(theme)) = (&self.syntax, &self.theme) {
             let mut highlight = HighlightLines::new(syntax, theme);
             let rope_str = text
@@ -167,22 +187,18 @@ impl Window {
             let mut text_line = LinesWithEndings::from(Box::leak(Box::new(rope_str)));
             if let Some(line) = &text_line.nth(0) {
                 if let Ok(hs) = highlight.highlight_line(line, &self.syntax_set.clone().unwrap()) {
-                        self.highlight_cache.insert(line_index, Self::to_spans(hs.clone()));
+                    self.highlight_cache
+                        .insert(line_index, Self::to_spans(hs.clone()));
                 }
             }
         }
     }
 
-    async fn remove_cache_line(&mut self, id: Uuid, line_index: usize) {
-        unimplemented!();
-        /*
-        if let Some(cache) = self.highlight_cache.get_mut(&id) {
-            cache.remove(line_index);
-        }
-        */
+    async fn remove_cache_line(&mut self, line_index: usize) {
+        let _ = self.highlight_cache.remove(line_index);
     }
 
-    async fn cache_current_line(&mut self, text: &Rope, id: Uuid, line_index: usize) {
+    async fn cache_current_line(&mut self, text: &Rope, line_index: usize) {
         if let (Some(syntax), Some(theme)) = (&self.syntax, &self.theme) {
             let mut highlight = HighlightLines::new(syntax, theme);
             let rope_str = text
@@ -192,26 +208,19 @@ impl Window {
             let mut text_line = LinesWithEndings::from(Box::leak(Box::new(rope_str)));
             if let Some(line) = &text_line.nth(0) {
                 if let Ok(hs) = highlight.highlight_line(line, &self.syntax_set.clone().unwrap()) {
-                    unimplemented!();
-                    /*
-                    if let Some(cache) = self.highlight_cache.get_mut(&id) {
-                        cache[line_index] = Self::to_spans(hs.clone());
-                    }
-                    */
+                    self.highlight_cache[line_index] = Self::to_spans(hs.clone())
                 }
             }
         }
     }
 
     fn line_numbers(line_number_count: usize) -> Vec<Vec<CachedSpan>> {
-            vec![(1..line_number_count)
-                .map(|l| {
-                    CachedSpan {
-                        content: ComprString::new(&format!("{:<5}", l)),
-                        style: Style::default().fg(Color::Yellow)
-                    }
-                })
-                .collect::<Vec<CachedSpan>>()]
+        vec![(1..line_number_count)
+            .map(|l| CachedSpan {
+                content: ComprString::new(&format!("{:<5}", l)),
+                style: Style::default().fg(Color::Yellow),
+            })
+            .collect::<Vec<CachedSpan>>()]
     }
 
     fn get_line_offset(line_width: u16, text_area_width: u16, alignment: Alignment) -> u16 {
@@ -222,7 +231,7 @@ impl Window {
         }
     }
 
-    pub fn render_text(&self,text_area: Rect,text: Vec<Spans>,buf: &mut TuiBuffer) {
+    pub fn render_text(&self, text_area: Rect, text: Vec<Spans>, buf: &mut TuiBuffer) {
         if text_area.height < 1 {
             return;
         }
@@ -238,19 +247,20 @@ impl Window {
                 }))
         });
 
-        let mut line_composer: Box<dyn LineComposer> = Box::new(WordWrapper::new(&mut styled, text_area.width, true));
+        let mut line_composer: Box<dyn LineComposer> =
+            Box::new(WordWrapper::new(&mut styled, text_area.width, true));
         let mut y = 0;
         while let Some((current_line, current_line_width)) = line_composer.next_line() {
             if y >= self.current_page {
-                let mut x = Self::get_line_offset(current_line_width, text_area.width, Alignment::Left);
+                let mut x =
+                    Self::get_line_offset(current_line_width, text_area.width, Alignment::Left);
                 for StyledGrapheme { symbol, style } in current_line {
-                    buf.get_mut(text_area.left() + x, text_area.top() + y - self.current_page)
-                        .set_symbol(if symbol.is_empty() {
-                            " "
-                        } else {
-                            symbol
-                        })
-                        .set_style(*style);
+                    buf.get_mut(
+                        text_area.left() + x,
+                        text_area.top() + y - self.current_page,
+                    )
+                    .set_symbol(if symbol.is_empty() { " " } else { symbol })
+                    .set_style(*style);
                     x += symbol.width() as u16;
                 }
             }
@@ -262,19 +272,19 @@ impl Window {
     }
 
     pub fn new(change: &WindowChange) -> Self {
-            Self {
-                id: Uuid::new_v4(),
-                buffer_id: change.id,
-                x_pos: change.x_pos,
-                y_pos: change.y_pos,
-                mode: change.mode.clone(),
-                title: change.title.clone(),
-                page_size: change.page_size,
-                current_page: change.current_page,
-                y_offset: 0,
-                x_offset: 4,
-                ..Window::default()
-            }
+        Self {
+            id: Uuid::new_v4(),
+            buffer_id: change.id,
+            x_pos: change.x_pos,
+            y_pos: change.y_pos,
+            mode: change.mode.clone(),
+            title: change.title.clone(),
+            page_size: change.page_size,
+            current_page: change.current_page,
+            y_offset: 0,
+            x_offset: 4,
+            ..Window::default()
+        }
     }
     pub fn cursor_x_pos(&self) -> u16 {
         let area = self.area.unwrap_or_default();
@@ -308,25 +318,39 @@ impl Window {
         None
     }
 
-    fn handle_display_token(
-        &mut self,
-        token: DisplayToken,
-    )  {
+    fn handle_display_token(&mut self, token: DisplayToken) {
         match token {
             DisplayToken::UpdateWindow(change) => {
-                    self.x_pos = change.x_pos;
-                    self.y_pos = change.y_pos;
-                    self.mode = change.mode;
-                    self.title = change.title;
-                    self.page_size = change.page_size;
-                    self.current_page = change.current_page;
-                    self.y_offset = 0;
-                    self.x_offset = 4;
-            },
-            DisplayToken::CacheWindowContent(id,text) => {
-                self.cache_formatted_text(&text, id);
-                self.cache_line_numbers(&text, id);
-            },
+                self.x_pos = change.x_pos;
+                self.y_pos = change.y_pos;
+                self.mode = change.mode;
+                self.title = change.title;
+                self.page_size = change.page_size;
+                self.current_page = change.current_page;
+                self.y_offset = 0;
+                self.x_offset = 4;
+            }
+            DisplayToken::CloseWindow(_) => {
+                unimplemented!();
+            }
+            DisplayToken::AppendCommand(_) => {
+                unimplemented!();
+            }
+            DisplayToken::CacheCurrentLine(text, line_index) => {
+                self.cache_current_line(&text, line_index);
+            }
+            DisplayToken::CacheWindowContent(text) => {
+                self.cache_formatted_text(&text);
+                self.cache_line_numbers(&text);
+            }
+            DisplayToken::CacheNewLine(text, line_index) => {
+                self.cache_new_line(&text, line_index);
+                self.cache_line_numbers(&text);
+            }
+            DisplayToken::RemoveCacheLine(text, line_index) => {
+                self.remove_cache_line(line_index);
+                self.cache_line_numbers(&text);
+            }
             DisplayToken::SetHighlight => {
                 let ps = SyntaxSet::load_defaults_newlines();
                 let ts = ThemeSet::load_defaults();
@@ -339,7 +363,7 @@ impl Window {
                 }
                 self.theme = Some(theme);
             }
-         _ => ()
+            _ => (),
         };
         ()
     }
@@ -350,22 +374,22 @@ impl Actor for Window {
 }
 
 impl Handler<Token> for Window {
-        type Result = ();
+    type Result = ();
 
-        fn handle(&mut self, msg: Token , _ctx: &mut Context<Self>) -> Self::Result {
-            match msg {
-                Token::Display(t) => {
-                    self.handle_display_token(t);
-                },
-                _ => ()
+    fn handle(&mut self, msg: Token, _ctx: &mut Context<Self>) -> Self::Result {
+        match msg {
+            Token::Display(t) => {
+                self.handle_display_token(t);
+            }
+            _ => (),
         }
     }
 }
 
 impl Handler<GetState> for Window {
-        type Result = Window;
+    type Result = Window;
 
-        fn handle(&mut self, _msg: GetState , _ctx: &mut Context<Self>) -> Self::Result {
-            self.clone()
-        }
+    fn handle(&mut self, _msg: GetState, _ctx: &mut Context<Self>) -> Self::Result {
+        self.clone()
+    }
 }

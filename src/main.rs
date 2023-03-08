@@ -1,24 +1,27 @@
 mod app;
 mod buffer;
-pub mod token;
+mod parser;
 pub mod reflow;
+pub mod token;
 mod ui;
 mod window;
-mod parser;
 
-use crossterm::{execute, terminal::{ScrollUp, SetSize, size}};
-use crossterm;
-use crossterm::event::{poll, read, Event};
-use std::time::Duration;
-use actix::prelude::*;
 use crate::{
-    parser::{Parser,UserInput},
     app::{App, Mode},
     buffer::Buffer,
-    token::{CommandToken,Token},
+    parser::{Parser, UserInput},
+    token::{CommandToken, Token},
     ui::Ui,
     window::Window,
 };
+use actix::prelude::*;
+use crossterm;
+use crossterm::event::{poll, read, Event};
+use crossterm::{
+    execute,
+    terminal::{size, ScrollUp, SetSize},
+};
+use std::time::Duration;
 
 use anyhow::Result as AnyhowResult;
 use argh::FromArgs;
@@ -79,23 +82,22 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let system = System::new();
     let execution = async {
         let app = App::new(cli.file_name).unwrap().start();
-        let parser = Parser {mode: Mode::Normal}.start();
+        let parser = Parser { mode: Mode::Normal }.start();
         let _ = app.send(Token::Command(CommandToken::NoOp)).await;
         loop {
-             if let Ok(_) = poll(Duration::from_millis(500)) {
+            if let Ok(_) = poll(Duration::from_millis(500)) {
                 let input = read();
                 if let Ok(Event::Key(event)) = input {
-                    if let Ok(Ok(token)) = parser.send(UserInput {event}).await {
+                    if let Ok(Ok(token)) = parser.send(UserInput { event }).await {
                         let _ = app.send(token).await;
                     }
-                   () 
+                    ()
                 }
-             }
-         }
+            }
+        }
     };
-        let arbiter = Arbiter::new();
-        arbiter.spawn(execution);
-        let _ = system.run();
+    let arbiter = Arbiter::new();
+    arbiter.spawn(execution);
+    let _ = system.run();
     Ok(())
 }
-

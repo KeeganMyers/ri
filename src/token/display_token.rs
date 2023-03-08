@@ -1,11 +1,11 @@
 use crate::app::Mode;
+use crate::window::Window;
 use anyhow::Error as AnyHowError;
+use crossterm::event::KeyEvent as Key;
 use ropey::Rope;
 use std::{convert::TryFrom, iter::Iterator};
-use crossterm::event::KeyEvent as Key;
 use tui::layout::Direction;
 use uuid::Uuid;
-use crate::window::Window;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WindowChange {
@@ -24,14 +24,14 @@ pub enum DisplayToken {
     SetHighlight,
     UpdateWindow(WindowChange),
     NewWindow(WindowChange, Option<Direction>),
-    DrawViewPort(Uuid,Vec<Window>),
+    DrawViewPort(Uuid, Vec<Window>),
     DrawWindow,
     SetTextLayout(Direction),
-    CacheWindowContent(Uuid, Rope),
-    AppendCommand(Uuid, Option<String>),
-    CacheCurrentLine(Uuid, Rope, usize),
-    CacheNewLine(Uuid, Rope, usize),
-    RemoveCacheLine(Uuid, Rope, usize),
+    CacheWindowContent(Rope),
+    AppendCommand(Option<String>),
+    CacheCurrentLine(Rope, usize),
+    CacheNewLine(Rope, usize),
+    RemoveCacheLine(Rope, usize),
     CloseWindow(Uuid),
 }
 
