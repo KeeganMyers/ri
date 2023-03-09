@@ -1,4 +1,5 @@
 use crate::{
+    Parser,
     token::{
         display_token::{DisplayToken, WindowChange},
         get_token_from_key, get_token_from_str, CommandToken, GetState, Token,
@@ -40,6 +41,7 @@ impl Default for Mode {
 }
 
 pub struct App {
+    pub parser: Addr<Parser>,
     pub terminal: Arc<Mutex<Term>>,
     pub buffers: HashMap<Uuid, Addr<Buffer>>,
     pub ui: Option<Addr<Ui>>,
@@ -120,7 +122,7 @@ impl App {
         Ok(())
     }
 
-    pub fn new(file_name: Option<String>) -> AnyHowResult<App> {
+    pub fn new(file_name: Option<String>, parser: Addr<Parser>) -> AnyHowResult<App> {
         enable_raw_mode()?;
         let _ = execute!(stdout(), terminal::Clear(ClearType::All));
         let mut stdout = stdout();
@@ -133,6 +135,7 @@ impl App {
         let window_map = HashMap::new();
         Ok(Self {
             terminal: terminal_arc,
+            parser,
             windows: window_map,
             buffers: buff_map,
             current_file: file_name,
@@ -145,7 +148,7 @@ impl App {
         })
     }
 
-    pub fn handle_command_token(&mut self, token: CommandToken) -> AnyHowResult<Vec<Token>> {
+    pub fn handle_command_token(&mut self, token: CommandToken,ctx: &mut Context<Self>) -> AnyHowResult<Vec<Token>> {
         match token {
             CommandToken::NoOp => Ok(vec![]),
             CommandToken::Quit => {
@@ -157,7 +160,8 @@ impl App {
                 if self.buffers.is_empty() {
                     self.should_quit = true;
                 }
-                Ok(vec![Token::Command(CommandToken::Quit)])
+                ctx.stop();
+                Ok(vec![])
             }
             CommandToken::TabNew => Ok(vec![]),
             CommandToken::Split(f_name) => {
@@ -239,8 +243,8 @@ impl App {
                 Ok(vec![])
             }
             CommandToken::Enter => {
+                /*
                 if let Some(buffer) = self.buffers.get_mut(&self.current_buffer_id) {
-                    /*
                     if let Some(command_text) = &buffer.command_text {
                         if let Ok(Token::Command(command)) =
                             get_token_from_str(&Mode::Command, &format!(":{}", command_text))
@@ -248,8 +252,8 @@ impl App {
                             return self.handle_command_token(command);
                         }
                     }
-                    */
                 }
+                */
                 Ok(vec![])
             }
             CommandToken::SetBuffer(id) => {
@@ -259,7 +263,8 @@ impl App {
                 Ok(vec![])
             }
             CommandToken::SetMode(mode) => {
-                self.mode = mode;
+                self.mode = mode.clone();
+                let _ = self.parser.try_send(Token::Command(CommandToken::SetMode(mode)));
                 Ok(vec![])
             }
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
@@ -271,7 +276,6 @@ impl App {
         token: DisplayToken,
         ctx: &mut Context<Self>,
     ) -> AnyHowResult<Vec<Token>> {
-        trace!("calling display handle token");
         match token {
             DisplayToken::DrawViewPort(_, _) => {
                 trace!("app attempting to handle DrawViewPort");
@@ -295,11 +299,9 @@ impl App {
         token: Token,
         ctx: &mut Context<Self>,
     ) -> AnyHowResult<Vec<Token>> {
-        trace!("calling handle token");
         let _ = match token {
-            Token::Command(t) => self.handle_command_token(t),
+            Token::Command(t) => self.handle_command_token(t,ctx),
             Token::Display(t) => {
-                trace!("in display match");
                 self.handle_display_token(t, ctx)
             }
             _ => Err(AnyHowError::msg("No Tokens Found".to_string())),

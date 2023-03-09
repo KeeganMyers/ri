@@ -45,6 +45,7 @@ impl TryFrom<&Key> for CommandToken {
 
     fn try_from(key: &Key) -> Result<Self, Self::Error> {
         match key.code {
+            KeyCode::Enter => Ok(Self::Enter),
             KeyCode::Esc => Ok(Self::Esc),
             KeyCode::Backspace => Ok(Self::Remove),
             _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),

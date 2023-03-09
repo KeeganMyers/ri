@@ -394,12 +394,9 @@ impl Buffer {
             }
             CommandToken::Quit => {
                 self.set_normal_mode();
-                if let Some(window) = &self.window {
-                    let _ = window.try_send(Token::Display(DisplayToken::CloseWindow(self.id)));
-                    let _ = self
-                        .app
-                        .try_send(Token::Display(DisplayToken::DrawViewPort(self.id, vec![])));
-                }
+                let _ = self
+                    .app
+                    .try_send(Token::Command(CommandToken::Quit));
             }
             CommandToken::Write => {
                 let _ = self.on_save();
@@ -423,17 +420,20 @@ impl Buffer {
                     .try_send(Token::Display(DisplayToken::DrawViewPort(self.id, vec![])));
             }
             CommandToken::Append(chars) => {
+                log::debug!("in append command");
                 self.command_text = self.command_text.clone().map(|mut t| {
                     t.push_str(&chars);
                     t
                 });
                 if let Some(window) = &self.window {
+                    /*
                     let _ = window.try_send(Token::Display(DisplayToken::AppendCommand(
                         self.command_text.clone(),
                     )));
                     let _ = self
                         .app
                         .try_send(Token::Display(DisplayToken::DrawViewPort(self.id, vec![])));
+                    */
                 }
             }
             CommandToken::Remove => {
@@ -451,6 +451,7 @@ impl Buffer {
                 }
             }
             CommandToken::Enter => {
+                log::debug!("in buffer enter {:?}",self.command_text);
                 if let Some(command_text) = &self.command_text {
                     if let Ok(Token::Command(command)) =
                         get_token_from_str(&Mode::Command, &format!(":{}", command_text))
@@ -577,8 +578,12 @@ impl Buffer {
                 self.standard_normal_response()
             }
             NormalToken::SwitchToCommand => {
+                log::debug!("switching to append");
                 self.command_text = Some("".to_string());
                 self.set_command_mode();
+                let _ = self
+                    .app
+                    .try_send(Token::Command(CommandToken::SetMode(Mode::Command)));
                 self.standard_normal_response()
             }
             NormalToken::SwitchToInsert => {

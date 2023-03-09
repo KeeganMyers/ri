@@ -1,15 +1,12 @@
 use crate::{
     app::Mode,
     reflow::{LineComposer, WordWrapper},
-    token::{command_token::*, display_token::*, normal_token::*, GetState, Token},
-    ui::Term,
-    Buffer,
+    token::{display_token::*, GetState, Token},
 };
 use actix::prelude::*;
-use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use ropey::Rope;
 use std::iter;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::Style as SyntectStyle;
 use syntect::util::LinesWithEndings;
@@ -18,14 +15,11 @@ use syntect::{
     parsing::{SyntaxReference, SyntaxSet},
 };
 use tui::{
-    backend::{Backend, CrosstermBackend},
     buffer::Buffer as TuiBuffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Span, Spans, StyledGrapheme},
     widgets::Widget,
-    widgets::{Block, Paragraph, Wrap},
-    Frame, Terminal,
 };
 use uuid::Uuid;
 
@@ -46,6 +40,7 @@ pub struct CachedSpan {
 }
 
 impl CachedSpan {
+    #[allow(dead_code)]
     fn raw(content: &str) -> Self {
         CachedSpan {
             content: ComprString::from(content),
@@ -248,7 +243,7 @@ impl Window {
         });
 
         let mut line_composer: Box<dyn LineComposer> =
-            Box::new(WordWrapper::new(&mut styled, text_area.width, true));
+            Box::new(WordWrapper::new(&mut styled, text_area.width, false));
         let mut y = 0;
         while let Some((current_line, current_line_width)) = line_composer.next_line() {
             if y >= self.current_page {
@@ -337,7 +332,7 @@ impl Window {
                 unimplemented!();
             }
             DisplayToken::CacheCurrentLine(text, line_index) => {
-                self.cache_current_line(&text, line_index);
+                let _ = self.cache_current_line(&text, line_index);
             }
             DisplayToken::CacheWindowContent(text) => {
                 self.cache_formatted_text(&text);
@@ -348,7 +343,7 @@ impl Window {
                 self.cache_line_numbers(&text);
             }
             DisplayToken::RemoveCacheLine(text, line_index) => {
-                self.remove_cache_line(line_index);
+                let _ = self.remove_cache_line(line_index);
                 self.cache_line_numbers(&text);
             }
             DisplayToken::SetHighlight => {

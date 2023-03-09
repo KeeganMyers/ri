@@ -17,10 +17,6 @@ use crate::{
 use actix::prelude::*;
 use crossterm;
 use crossterm::event::{poll, read, Event};
-use crossterm::{
-    execute,
-    terminal::{size, ScrollUp, SetSize},
-};
 use std::time::Duration;
 
 use anyhow::Result as AnyhowResult;
@@ -81,15 +77,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let _ = setup_logger();
     let system = System::new();
     let execution = async {
-        let app = App::new(cli.file_name).unwrap().start();
         let parser = Parser { mode: Mode::Normal }.start();
+        let app = App::new(cli.file_name,parser.clone()).unwrap().start();
         let _ = app.send(Token::Command(CommandToken::NoOp)).await;
         loop {
             if let Ok(_) = poll(Duration::from_millis(500)) {
                 let input = read();
                 if let Ok(Event::Key(event)) = input {
                     if let Ok(Ok(token)) = parser.send(UserInput { event }).await {
-                        let _ = app.send(token).await;
+                        if  app.send(token).await.is_err() {
+                            System::current().stop();
+                            break;
+                        }
                     }
                     ()
                 }
