@@ -1,11 +1,14 @@
-use crate::util::event::Event;
+use crate::{app::Mode, Token};
+use actix::prelude::*;
 use anyhow::Error as AnyHowError;
+use crossterm::event::{KeyCode, KeyEvent as Key};
 use std::{convert::TryFrom, iter::Iterator};
-use termion::event::Key;
 use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CommandToken {
+    NoOp,
+    SetMode(Mode),
     Quit,
     Write,
     TabNew,
@@ -17,6 +20,7 @@ pub enum CommandToken {
     Esc,
     Enter,
     SetBuffer(Uuid),
+    SetBufferWindow(Recipient<Token>),
 }
 
 pub const PARSE_FAILURE_ERR: &'static str = "Unknown Token";
@@ -36,13 +40,14 @@ impl TryFrom<&String> for CommandToken {
     }
 }
 
-impl TryFrom<&Event<Key>> for CommandToken {
+impl TryFrom<&Key> for CommandToken {
     type Error = AnyHowError;
 
-    fn try_from(key: &Event<Key>) -> Result<Self, Self::Error> {
-        match key {
-            Event::Input(Key::Esc) => Ok(Self::Esc),
-            Event::Input(Key::Backspace) => Ok(Self::Remove),
+    fn try_from(key: &Key) -> Result<Self, Self::Error> {
+        match key.code {
+            KeyCode::Enter => Ok(Self::Enter),
+            KeyCode::Esc => Ok(Self::Esc),
+            KeyCode::Backspace => Ok(Self::Remove),
             _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),
         }
     }

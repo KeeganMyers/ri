@@ -1,9 +1,9 @@
 use crate::app::Mode;
-use crate::util::event::Event;
+use crate::window::Window;
 use anyhow::Error as AnyHowError;
+use crossterm::event::KeyEvent as Key;
 use ropey::Rope;
 use std::{convert::TryFrom, iter::Iterator};
-use termion::event::Key;
 use tui::layout::Direction;
 use uuid::Uuid;
 
@@ -19,20 +19,19 @@ pub struct WindowChange {
     pub current_page: u16,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone)]
 pub enum DisplayToken {
     SetHighlight,
     UpdateWindow(WindowChange),
     NewWindow(WindowChange, Option<Direction>),
-    DropWindow(Uuid),
-    DrawViewPort,
+    DrawViewPort(Uuid, Vec<Window>),
+    DrawWindow,
     SetTextLayout(Direction),
-    DrawWindow(Uuid),
-    CacheWindowContent(Uuid, Rope),
-    AppendCommand(Uuid, Option<String>),
-    CacheCurrentLine(Uuid, Rope, usize),
-    CacheNewLine(Uuid, Rope, usize),
-    RemoveCacheLine(Uuid, Rope, usize),
+    CacheWindowContent(Rope),
+    AppendCommand(Option<String>),
+    CacheCurrentLine(Rope, usize),
+    CacheNewLine(Rope, usize),
+    RemoveCacheLine(Rope, usize),
     CloseWindow(Uuid),
 }
 
@@ -47,10 +46,10 @@ impl TryFrom<&String> for DisplayToken {
     }
 }
 
-impl TryFrom<&Event<Key>> for DisplayToken {
+impl TryFrom<&Key> for DisplayToken {
     type Error = AnyHowError;
 
-    fn try_from(key: &Event<Key>) -> Result<Self, Self::Error> {
+    fn try_from(key: &Key) -> Result<Self, Self::Error> {
         match key {
             _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),
         }

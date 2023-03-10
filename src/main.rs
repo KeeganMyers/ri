@@ -1,17 +1,23 @@
 mod app;
 mod buffer;
+mod parser;
+pub mod reflow;
 pub mod token;
 mod ui;
-mod util;
 mod window;
 
 use crate::{
     app::{App, Mode},
     buffer::Buffer,
-    token::Token,
+    parser::{Parser, UserInput},
+    token::{CommandToken, Token},
     ui::Ui,
     window::Window,
 };
+use actix::prelude::*;
+use crossterm;
+use crossterm::event::{poll, read, Event};
+use std::time::Duration;
 
 use anyhow::Result as AnyhowResult;
 use argh::FromArgs;
@@ -69,15 +75,28 @@ fn setup_logger() -> AnyhowResult<()> {
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli: Cli = argh::from_env();
     let _ = setup_logger();
-    let (app_tx, app_rx) = flume::unbounded::<Token>();
-    let (ui_tx, ui_rx) = flume::unbounded::<Token>();
-    let ui_handler = async_std::task::spawn(Ui::receive_tokens(app_rx.clone(), ui_tx.clone()));
-    let app_handler = async_std::task::spawn(App::receive_tokens(
-        cli.file_name,
-        ui_rx.clone(),
-        app_tx.clone(),
-    ));
-    let _ = ui_handler.await;
-    let _ = app_handler.await;
+    let system = System::new();
+    let execution = async {
+        let parser = Parser { mode: Mode::Normal }.start();
+        let app = App::new(cli.file_name,parser.clone()).unwrap().start();
+        let _ = app.send(Token::Command(CommandToken::NoOp)).await;
+        loop {
+            if let Ok(_) = poll(Duration::from_millis(500)) {
+                let input = read();
+                if let Ok(Event::Key(event)) = input {
+                    if let Ok(Ok(token)) = parser.send(UserInput { event }).await {
+                        if  app.send(token).await.is_err() {
+                            System::current().stop();
+                            break;
+                        }
+                    }
+                    ()
+                }
+            }
+        }
+    };
+    let arbiter = Arbiter::new();
+    arbiter.spawn(execution);
+    let _ = system.run();
     Ok(())
 }

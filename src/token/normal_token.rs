@@ -1,7 +1,6 @@
-use crate::util::event::Event;
 use anyhow::Error as AnyHowError;
+use crossterm::event::{KeyCode, KeyEvent as Key};
 use std::{convert::TryFrom, iter::Iterator};
-use termion::event::Key;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum NormalToken {
@@ -87,17 +86,17 @@ impl TryFrom<&String> for NormalToken {
     }
 }
 
-impl TryFrom<&Event<Key>> for NormalToken {
+impl TryFrom<&Key> for NormalToken {
     type Error = AnyHowError;
 
-    fn try_from(key: &Event<Key>) -> Result<Self, Self::Error> {
-        match key {
-            Event::Input(Key::Up) => Ok(Self::Up),
-            Event::Input(Key::Down) => Ok(Self::Down),
-            Event::Input(Key::Left) => Ok(Self::Left),
-            Event::Input(Key::Right) => Ok(Self::Right),
-            Event::Input(Key::Esc) => Ok(Self::Esc),
-            Event::Input(Key::Backspace) => Ok(Self::Left),
+    fn try_from(key: &Key) -> Result<Self, Self::Error> {
+        match key.code {
+            KeyCode::Up => Ok(Self::Up),
+            KeyCode::Down => Ok(Self::Down),
+            KeyCode::Left => Ok(Self::Left),
+            KeyCode::Right => Ok(Self::Right),
+            KeyCode::Esc => Ok(Self::Esc),
+            KeyCode::Backspace => Ok(Self::Left),
             _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),
         }
     }

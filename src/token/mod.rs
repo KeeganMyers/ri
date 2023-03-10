@@ -5,21 +5,24 @@ pub mod insert_token;
 pub mod normal_token;
 pub mod operator_token;
 pub mod range_token;
-use crate::util::event::Event;
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
+use crossterm::event::KeyEvent as Key;
 use std::convert::TryFrom;
-use termion::event::Key;
 
+use crate::window::Window;
 use crate::Mode;
-pub use append_token::AppendToken;
-pub use command_token::CommandToken;
-pub use display_token::DisplayToken;
-pub use insert_token::InsertToken;
-pub use normal_token::NormalToken;
-pub use operator_token::OperatorToken;
-pub use range_token::RangeToken;
+use actix::prelude::*;
+pub use append_token::*;
+pub use command_token::*;
+pub use display_token::*;
+pub use insert_token::*;
+pub use normal_token::*;
+pub use operator_token::*;
+pub use range_token::*;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Message)]
+#[rtype(result = "()")]
+#[derive(Clone)]
 pub enum Token {
     Append(AppendToken),
     Command(CommandToken),
@@ -29,6 +32,11 @@ pub enum Token {
     Range(RangeToken),
     Display(DisplayToken),
 }
+
+#[derive(Message)]
+#[rtype(result = "Window")]
+#[derive(Clone, Debug)]
+pub struct GetState {}
 
 pub fn get_token_from_str(mode: &Mode, input: &String) -> AnyHowResult<Token> {
     match mode {
@@ -50,7 +58,7 @@ pub fn get_token_from_str(mode: &Mode, input: &String) -> AnyHowResult<Token> {
     }
 }
 
-pub fn get_token_from_key(mode: &Mode, event: &Event<Key>) -> AnyHowResult<Token> {
+pub fn get_token_from_key(mode: &Mode, event: &Key) -> AnyHowResult<Token> {
     match mode {
         Mode::Normal => {
             if let Ok(normal) = NormalToken::try_from(event) {
