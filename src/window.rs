@@ -1,5 +1,4 @@
 use crate::{
-    app::Mode,
     reflow::{LineComposer, WordWrapper},
     token::{display_token::*, GetState, Token},
 };
@@ -68,7 +67,6 @@ pub struct Window {
     pub x_offset: u16,
     pub x_pos: u16,
     pub y_pos: u16,
-    pub mode: Mode,
     pub page_size: u16,
     pub current_page: u16,
     pub outer_areas: Vec<Option<Rect>>,
@@ -88,7 +86,7 @@ pub struct Window {
     pub syntax: Option<SyntaxReference>,
 }
 
-impl Widget for Window {
+impl Widget for &Window {
     fn render(self, _area: Rect, buf: &mut TuiBuffer) {
         if let Some(area) = self.area {
             let inner_text_splits = Layout::default()
@@ -129,6 +127,25 @@ impl Widget for Window {
 }
 
 impl Window {
+
+    pub fn cache_window_content(&mut self, text: &Rope) {
+        self.cache_formatted_text(&text);
+        self.cache_line_numbers(&text);
+    }
+
+    pub fn set_highlight(&mut self) {
+                let ps = SyntaxSet::load_defaults_newlines();
+                let ts = ThemeSet::load_defaults();
+                let syntax = ps.find_syntax_by_extension("rs").clone();
+                let theme = ts.themes["base16-ocean.dark"].clone();
+                self.syntax_set = Some(ps.clone());
+                self.theme_set = Some(Arc::new(ts));
+                if let Some(s) = syntax {
+                    self.syntax = Some(s.clone());
+                }
+                self.theme = Some(theme);
+    }
+
     fn convert_style(style: SyntectStyle) -> Style {
         Style::default().fg(Color::Rgb(
             style.foreground.r,
@@ -151,7 +168,7 @@ impl Window {
             .collect::<Vec<CachedSpan>>()
     }
 
-    fn cache_formatted_text(&mut self, text: &Rope) {
+    pub fn cache_formatted_text(&mut self, text: &Rope) {
         if let (Some(syntax), Some(theme)) = (&self.syntax, &self.theme) {
             let mut highlight = HighlightLines::new(syntax, theme);
             let mut spans: Vec<Vec<CachedSpan>> = vec![];
@@ -166,13 +183,13 @@ impl Window {
         }
     }
 
-    fn cache_line_numbers(&mut self, text: &Rope) {
+    pub fn cache_line_numbers(&mut self, text: &Rope) {
         let line_count = text.len_lines();
         let local_line_nums = Self::line_numbers(line_count);
         self.line_num_cache = local_line_nums.clone();
     }
 
-    fn cache_new_line(&mut self, text: &Rope, line_index: usize) {
+    pub fn cache_new_line(&mut self, text: &Rope, line_index: usize) {
         if let (Some(syntax), Some(theme)) = (&self.syntax, &self.theme) {
             let mut highlight = HighlightLines::new(syntax, theme);
             let rope_str = text
@@ -189,11 +206,11 @@ impl Window {
         }
     }
 
-    async fn remove_cache_line(&mut self, line_index: usize) {
+    pub fn remove_cache_line(&mut self, line_index: usize) {
         let _ = self.highlight_cache.remove(line_index);
     }
 
-    async fn cache_current_line(&mut self, text: &Rope, line_index: usize) {
+    pub fn cache_current_line(&mut self, text: &Rope, line_index: usize) {
         if let (Some(syntax), Some(theme)) = (&self.syntax, &self.theme) {
             let mut highlight = HighlightLines::new(syntax, theme);
             let rope_str = text
@@ -272,7 +289,6 @@ impl Window {
             buffer_id: change.id,
             x_pos: change.x_pos,
             y_pos: change.y_pos,
-            mode: change.mode.clone(),
             title: change.title.clone(),
             page_size: change.page_size,
             current_page: change.current_page,
@@ -313,17 +329,19 @@ impl Window {
         None
     }
 
-    fn handle_display_token(&mut self, token: DisplayToken) {
-        match token {
-            DisplayToken::UpdateWindow(change) => {
+    pub fn update(&mut self,change: WindowChange) {
                 self.x_pos = change.x_pos;
                 self.y_pos = change.y_pos;
-                self.mode = change.mode;
                 self.title = change.title;
                 self.page_size = change.page_size;
                 self.current_page = change.current_page;
                 self.y_offset = 0;
                 self.x_offset = 4;
+    }
+
+    fn handle_display_token(&mut self, token: DisplayToken) {
+        match token {
+            DisplayToken::UpdateWindow(change) => {
             }
             DisplayToken::CloseWindow(_) => {
                 unimplemented!();
@@ -345,18 +363,6 @@ impl Window {
             DisplayToken::RemoveCacheLine(text, line_index) => {
                 let _ = self.remove_cache_line(line_index);
                 self.cache_line_numbers(&text);
-            }
-            DisplayToken::SetHighlight => {
-                let ps = SyntaxSet::load_defaults_newlines();
-                let ts = ThemeSet::load_defaults();
-                let syntax = ps.find_syntax_by_extension("rs").clone();
-                let theme = ts.themes["base16-ocean.dark"].clone();
-                self.syntax_set = Some(ps.clone());
-                self.theme_set = Some(Arc::new(ts));
-                if let Some(s) = syntax {
-                    self.syntax = Some(s.clone());
-                }
-                self.theme = Some(theme);
             }
             _ => (),
         };

@@ -2,7 +2,8 @@ use crate::{
     Parser,
     token::{
         display_token::{DisplayToken, WindowChange},
-        get_token_from_key, get_token_from_str, CommandToken, GetState, Token,
+        get_token_from_key, get_token_from_str, CommandToken, GetState, AppendToken,Token,
+        InsertToken
     },
     ui::Term,
     Buffer, Ui, Window,
@@ -42,10 +43,11 @@ impl Default for Mode {
 
 pub struct App {
     pub parser: Addr<Parser>,
-    pub terminal: Arc<Mutex<Term>>,
-    pub buffers: HashMap<Uuid, Addr<Buffer>>,
-    pub ui: Option<Addr<Ui>>,
-    pub windows: HashMap<Uuid, Addr<Window>>,
+    pub terminal: Term,
+    pub command_text: Option<String>,
+    pub buffers: HashMap<Uuid, Buffer>,
+    pub ui: Ui,
+    pub windows: HashMap<Uuid, Window>,
     pub window_layout: Tree<Uuid>,
     pub current_window_id: Uuid,
     pub current_buffer_id: Uuid,
@@ -56,70 +58,43 @@ pub struct App {
 
 impl Actor for App {
     type Context = Context<Self>;
-
-    fn started(&mut self, ctx: &mut Context<Self>) {
-        let addr = ctx.address().recipient();
-        if let Ok(ui) = Ui::new(addr.clone(), self.terminal.clone()) {
-            let buffer = Buffer::new(addr, self.current_file.clone()).unwrap();
-            let mut window = Window::new(&WindowChange {
-                id: buffer.id,
-                x_pos: buffer.x_pos,
-                y_pos: buffer.y_pos,
-                mode: buffer.mode.clone(),
-                title: Some(buffer.title.clone()),
-                page_size: buffer.page_size,
-                current_page: buffer.current_page,
-                ..WindowChange::default()
-            });
-            let buff_id = buffer.id.clone();
-            let window_id = window.id.clone();
-
-            window.area = Some(ui.text_area.clone());
-            let ui_addr = ui.start();
-            let window_addr = window.start();
-            let buffer_addr = buffer.clone().start();
-            let _ = self.window_layout.insert(Node::new(window_id), AsRoot);
-            self.buffers.insert(buffer.id, buffer_addr.clone());
-            self.windows.insert(window_id, window_addr.clone());
-            self.current_buffer_id = buff_id;
-            self.current_window_id = window_id;
-
-            self.ui = Some(ui_addr.clone());
-            let _ = window_addr.try_send(Token::Display(DisplayToken::SetHighlight));
-            let _ = window_addr.try_send(Token::Display(DisplayToken::CacheWindowContent(
-                buffer.text.clone(),
-            )));
-            let _ = buffer_addr.try_send(Token::Command(CommandToken::SetBufferWindow(
-                window_addr.clone().recipient(),
-            )));
-            let windows = self.windows.clone();
-            async move {
-                let _ = Self::render_ui(window_id, &ui_addr, &windows).await;
-            }
-            .into_actor(self)
-            .wait(ctx)
-        }
-    }
 }
 
 impl App {
-    pub async fn render_ui(
-        current_window_id: Uuid,
-        ui: &Addr<Ui>,
-        windows: &HashMap<Uuid, Addr<Window>>,
-    ) -> AnyHowResult<()> {
-        let mut window_widgets: Vec<Window> = vec![];
-        for window in windows.values() {
-            if let Ok(window_widget) = window.send(GetState {}).await {
-                window_widgets.push(window_widget)
-            }
-        }
+    pub fn get_mut_buffer(&mut self) -> Option<&mut Buffer> {
+        self.buffers.get_mut(&self.current_buffer_id)
+    }
 
-        let _ = ui.try_send(Token::Display(DisplayToken::DrawViewPort(
-            current_window_id,
-            window_widgets,
-        )));
-        Ok(())
+    pub fn get_mut_window(&mut self) -> Option<&mut Window> {
+        self.windows.get_mut(&self.current_window_id)
+    }
+
+    pub fn render_ui(&mut self)  {
+       self.ui.draw_view_port(&self.current_window_id,self.windows.values().collect::<Vec<&Window>>(),&mut self.terminal)
+    }
+
+    pub fn set_command_mode(&mut self) {
+        self.mode = Mode::Command
+    }
+
+    pub fn set_insert_mode(&mut self) {
+        self.mode = Mode::Insert
+    }
+
+    pub fn set_visual_mode(&mut self) {
+        self.mode = Mode::Visual;
+        self.get_mut_buffer().map(|b|  {
+            let idx = b.get_cursor_idx();
+            b.start_select_pos = Some(idx);
+        });
+    }
+
+    pub fn set_append_mode(&mut self) {
+        self.mode = Mode::Append
+    }
+
+    pub fn set_normal_mode(&mut self) {
+        self.mode = Mode::Normal
     }
 
     pub fn new(file_name: Option<String>, parser: Addr<Parser>) -> AnyHowResult<App> {
@@ -129,28 +104,259 @@ impl App {
         execute!(stdout, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let terminal = Terminal::new(backend)?;
-        let window_layout: Tree<Uuid> = Tree::new();
-        let terminal_arc = Arc::new(Mutex::new(terminal));
-        let buff_map = HashMap::new();
-        let window_map = HashMap::new();
+        let mut window_layout: Tree<Uuid> = Tree::new();
+        let mut buffers = HashMap::new();
+        let mut windows = HashMap::new();
+        let ui = Ui::new(&terminal);
+        let buffer = Buffer::new(file_name.clone()).unwrap();
+        let mut window = Window::new(&WindowChange {
+            id: buffer.id,
+            x_pos: buffer.x_pos,
+            y_pos: buffer.y_pos,
+            mode: buffer.mode.clone(),
+            title: Some(buffer.title.clone()),
+            page_size: buffer.page_size,
+            current_page: buffer.current_page,
+            ..WindowChange::default()
+        });
+        let current_buffer_id = buffer.id.clone();
+        let current_window_id = window.id.clone();
+        window.set_highlight();
+        window.cache_window_content(&buffer.text);
+        window.area = Some(ui.text_area.clone());
+        let _ = window_layout.insert(Node::new(current_window_id), AsRoot);
+        buffers.insert(buffer.id, buffer);
+        windows.insert(current_window_id, window);
+        //self.render_ui();
+
         Ok(Self {
-            terminal: terminal_arc,
+            terminal,
             parser,
-            windows: window_map,
-            buffers: buff_map,
+            windows,
+            buffers,
+            ui,
             current_file: file_name,
             window_layout,
             should_quit: false,
-            current_buffer_id: Uuid::new_v4(),
-            current_window_id: Uuid::new_v4(),
-            ui: None,
+            current_buffer_id,
+            current_window_id,
             mode: Mode::Normal,
+            command_text: None
         })
     }
 
-    pub fn handle_command_token(&mut self, token: CommandToken,ctx: &mut Context<Self>) -> AnyHowResult<Vec<Token>> {
+    pub fn handle_insert_token(&mut self, token: InsertToken) {
         match token {
-            CommandToken::NoOp => Ok(vec![]),
+            InsertToken::Append(chars) => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.insert_chars(&chars);
+                  let change = WindowChange {
+                            id: buffer.id,
+                            x_pos: buffer.x_pos,
+                            y_pos: buffer.y_pos,
+                            mode: buffer.mode.clone(),
+                            title: Some(buffer.title.clone()),
+                            page_size: buffer.page_size,
+                            current_page: buffer.current_page,
+                            ..WindowChange::default()
+                        };
+                    self.get_mut_window().map(|w| {
+                        w.cache_current_line(&buffer.text, buffer.y_pos as usize);
+                        w.update(change)
+                    });
+                }
+            }
+            InsertToken::Remove => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.remove_char();
+                  let change = WindowChange {
+                            id: buffer.id,
+                            x_pos: buffer.x_pos,
+                            y_pos: buffer.y_pos,
+                            mode: buffer.mode.clone(),
+                            title: Some(buffer.title.clone()),
+                            page_size: buffer.page_size,
+                            current_page: buffer.current_page,
+                            ..WindowChange::default()
+                        };
+                    self.get_mut_window().map(|w| {
+                        w.cache_current_line(&buffer.text, buffer.y_pos as usize);
+                        w.update(change)
+                    });
+                }
+            }
+            InsertToken::Esc => {
+                self.set_normal_mode();
+                self.get_mut_buffer().map(|b| b.start_select_pos = None);
+            }
+            InsertToken::Enter => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                  buffer.insert_return();
+                  let change = WindowChange {
+                            id: buffer.id,
+                            x_pos: buffer.x_pos,
+                            y_pos: buffer.y_pos,
+                            mode: buffer.mode.clone(),
+                            title: Some(buffer.title.clone()),
+                            page_size: buffer.page_size,
+                            current_page: buffer.current_page,
+                            ..WindowChange::default()
+                        };
+                    self.get_mut_window().map(|w| {
+                        w.cache_new_line(&buffer.text, buffer.y_pos as usize);
+                        w.cache_line_numbers(&buffer.text);
+                        w.update(change)
+                    });
+                }
+                self.render_ui();
+            }
+            _ => ()
+        }
+    }
+
+    pub fn handle_normal_token(&mut self, token: NormalToken) {
+        match token {
+            NormalToken::Up => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                  buffer.on_up();
+                  let change = WindowChange {
+                            id: buffer.id,
+                            x_pos: buffer.x_pos,
+                            y_pos: buffer.y_pos,
+                            mode: buffer.mode.clone(),
+                            title: Some(buffer.title.clone()),
+                            page_size: buffer.page_size,
+                            current_page: buffer.current_page,
+                            ..WindowChange::default()
+                        };
+                    self.get_mut_window().map(|w| {
+                        w.update(change)
+                    });
+                }
+                self.render_ui();
+            },
+            NormalToken::Down => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                  buffer.on_down();
+                  let change = WindowChange {
+                            id: buffer.id,
+                            x_pos: buffer.x_pos,
+                            y_pos: buffer.y_pos,
+                            mode: buffer.mode.clone(),
+                            title: Some(buffer.title.clone()),
+                            page_size: buffer.page_size,
+                            current_page: buffer.current_page,
+                            ..WindowChange::default()
+                        };
+                    self.get_mut_window().map(|w| {
+                        w.update(change)
+                    });
+                }
+                self.render_ui();
+            },
+            NormalToken::Left => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                  buffer.on_left();
+                  let change = WindowChange {
+                            id: buffer.id,
+                            x_pos: buffer.x_pos,
+                            y_pos: buffer.y_pos,
+                            mode: buffer.mode.clone(),
+                            title: Some(buffer.title.clone()),
+                            page_size: buffer.page_size,
+                            current_page: buffer.current_page,
+                            ..WindowChange::default()
+                        };
+                    self.get_mut_window().map(|w| {
+                        w.update(change)
+                    });
+                }
+                self.render_ui();
+            },
+            NormalToken::Right => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                  buffer.on_right();
+                  let change = WindowChange {
+                            id: buffer.id,
+                            x_pos: buffer.x_pos,
+                            y_pos: buffer.y_pos,
+                            mode: buffer.mode.clone(),
+                            title: Some(buffer.title.clone()),
+                            page_size: buffer.page_size,
+                            current_page: buffer.current_page,
+                            ..WindowChange::default()
+                        };
+                    self.get_mut_window().map(|w| {
+                        w.update(change)
+                    });
+                }
+                self.render_ui();
+            },
+            NormalToken::SwitchToCommand => {
+                self.command_text = Some("".to_string());
+                self.set_command_mode();
+                self.render_ui();
+            },
+            NormalToken::SwitchToInsert => {
+                self.set_insert_mode();
+                self.render_ui();
+            },
+            NormalToken::SwitchToAppend => {
+                self.set_append_mode();
+                self.render_ui();
+            },
+            _ => ()
+        }
+    }
+
+    pub fn handle_append_token(&mut self, token: AppendToken) {
+        match token {
+            AppendToken::Enter => {
+                self.get_mut_buffer().map(|b| b.append_return());
+            },
+            AppendToken::Remove => {
+                self.get_mut_buffer().map(|b| b.remove_char());
+            },
+            AppendToken::Append(chars) => {
+                self.get_mut_buffer().map(|b| b.append_chars(&chars));
+            },
+            AppendToken::Esc => {
+                self.get_mut_buffer().map(|b| b.start_select_pos = None);
+                self.set_normal_mode();
+            }
+        }
+    }
+
+    pub fn handle_command_token(&mut self, token: CommandToken) {
+        match token {
+            CommandToken::Write => {
+                self.get_mut_buffer().and_then(|b| b.on_save().ok());
+                let windows = self.windows.clone();
+                self.render_ui();
+            },
+            CommandToken::Split(_) => {
+                self.set_normal_mode();
+            },
+            CommandToken::VerticalSplit(_) => {
+                self.set_normal_mode();
+            }
+            CommandToken::Esc => {
+                self.set_normal_mode();
+                self.render_ui();
+            }
+            CommandToken::Append(chars) => {
+                self.command_text = self.command_text.clone().map(|mut t| {
+                    t.push_str(&chars);
+                    t
+                });
+            }
+            CommandToken::Remove => {
+                self.command_text = self.command_text.clone().map(|mut t| {
+                    t.truncate(t.len() - 1);
+                    t
+                });
+            }
+            CommandToken::NoOp => (),
             CommandToken::Quit => {
                 let id = self.current_buffer_id;
                 self.buffers.remove(&id);
@@ -160,10 +366,8 @@ impl App {
                 if self.buffers.is_empty() {
                     self.should_quit = true;
                 }
-                ctx.stop();
-                Ok(vec![])
             }
-            CommandToken::TabNew => Ok(vec![]),
+            CommandToken::TabNew => (),
             CommandToken::Split(f_name) => {
                 /*
                 if let Some(file_name) = f_name {
@@ -201,7 +405,6 @@ impl App {
                     Ok(vec![])
                 }
                 */
-                Ok(vec![])
             }
             CommandToken::VerticalSplit(f_name) => {
                 /*
@@ -240,34 +443,26 @@ impl App {
                     Ok(vec![])
                 }
                 */
-                Ok(vec![])
             }
             CommandToken::Enter => {
-                /*
-                if let Some(buffer) = self.buffers.get_mut(&self.current_buffer_id) {
-                    if let Some(command_text) = &buffer.command_text {
-                        if let Ok(Token::Command(command)) =
-                            get_token_from_str(&Mode::Command, &format!(":{}", command_text))
-                        {
-                            return self.handle_command_token(command);
-                        }
+                if let Some(command_text) = &self.command_text {
+                    if let Ok(Token::Command(command)) =
+                        get_token_from_str(&Mode::Command, &format!(":{}", command_text))
+                    {
+                        return self.handle_command_token(command);
                     }
                 }
-                */
-                Ok(vec![])
             }
             CommandToken::SetBuffer(id) => {
                 if let Some(_buffer) = self.buffers.get(&id) {
                     self.current_buffer_id = id;
                 }
-                Ok(vec![])
             }
             CommandToken::SetMode(mode) => {
                 self.mode = mode.clone();
                 let _ = self.parser.try_send(Token::Command(CommandToken::SetMode(mode)));
-                Ok(vec![])
             }
-            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+            _ => (),
         }
     }
 
@@ -275,38 +470,31 @@ impl App {
         &mut self,
         token: DisplayToken,
         ctx: &mut Context<Self>,
-    ) -> AnyHowResult<Vec<Token>> {
+    ) {
         match token {
             DisplayToken::DrawViewPort(_, _) => {
                 trace!("app attempting to handle DrawViewPort");
-                if let Some(ui) = self.ui.clone() {
-                    let windows = self.windows.clone();
-                    let window_id = self.current_window_id.clone();
-                    async move {
-                        let _ = Self::render_ui(window_id, &ui, &windows).await;
-                    }
-                    .into_actor(self)
-                    .wait(ctx);
-                }
+                self.render_ui();
             }
             _ => (),
         };
-        Ok(vec![])
     }
 
     pub fn handle_token(
         &mut self,
         token: Token,
         ctx: &mut Context<Self>,
-    ) -> AnyHowResult<Vec<Token>> {
+    ) {
         let _ = match token {
-            Token::Command(t) => self.handle_command_token(t,ctx),
+            Token::Command(t) => self.handle_command_token(t),
+            Token::Append(t) => self.handle_append_token(t),
+            Token::Normal(t) => self.handle_normal_token(t),
+            Token::Insert(t) => self.handle_insert_token(t),
             Token::Display(t) => {
                 self.handle_display_token(t, ctx)
             }
-            _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
+            _ => (),
         };
-        Ok(vec![])
     }
 }
 
@@ -314,13 +502,6 @@ impl Handler<Token> for App {
     type Result = ();
 
     fn handle(&mut self, msg: Token, ctx: &mut Context<Self>) -> Self::Result {
-        if let Some(buffer) = self.buffers.get(&self.current_buffer_id) {
-            let _ = buffer.try_send(msg.clone());
-        }
-        if let Some(window) = self.windows.get(&self.current_window_id) {
-            let _ = window.try_send(msg.clone());
-        }
-        let _ = self.ui.as_ref().and_then(|ui| Some(ui.send(msg.clone())));
         let _ = self.handle_token(msg, ctx);
         ()
     }

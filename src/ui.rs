@@ -18,13 +18,11 @@ pub type Term = Terminal<CrosstermBackend<Stdout>>;
 
 #[derive(Default)]
 pub struct Ui {
-    pub app: Option<Recipient<Token>>,
     pub should_quit: bool,
     pub current_window_id: Uuid,
     pub head_area: Rect,
     pub text_area: Rect,
     pub foot_area: Rect,
-    pub terminal: Option<Arc<Mutex<Term>>>,
 }
 
 impl Actor for Ui {
@@ -32,6 +30,23 @@ impl Actor for Ui {
 }
 
 impl Ui {
+    pub fn draw_view_port(&mut self, current_window_id: &Uuid, window_widgets:  Vec<&Window>,terminal: &mut Term) {
+                let head_area = self.head_area.clone();
+                let foot_area = self.foot_area.clone();
+                let text_area = self.text_area.clone();
+                let _current_window_id = self.current_window_id.clone();
+                let _ = terminal.draw(|f| {
+                    Self::draw(
+                        current_window_id,
+                        head_area,
+                        foot_area,
+                        text_area,
+                        window_widgets,
+                        f,
+                    )
+                });
+    }
+
     pub fn add_text_split(&mut self, _direction: Direction) {
         /*
         let text_area = if let Some(area) = self
@@ -82,11 +97,11 @@ impl Ui {
         */
 
     pub fn draw<'a, B: 'a>(
-        current_window_id: Uuid,
+        current_window_id: &Uuid,
         head_area: Rect,
         foot_area: Rect,
         text_area: Rect,
-        window_widgets: Vec<Window>,
+        window_widgets: Vec<&Window>,
         f: &mut Frame<'a, B>,
     ) where
         B: Backend,
@@ -94,7 +109,7 @@ impl Ui {
         Self::draw_header(None, f, head_area);
 
         for window in window_widgets {
-            if window.id == current_window_id {
+            if window.id == *current_window_id {
                 f.set_cursor(window.cursor_x_pos(), window.cursor_y_pos());
             }
 
@@ -162,52 +177,20 @@ impl Ui {
         f.render_widget(paragraph, area);
     }
 
-    pub fn new(app: Recipient<Token>, terminal: Arc<Mutex<Term>>) -> AnyHowResult<Self> {
-        /*
-          let _ = execute!(stdout(), terminal::Clear(ClearType::All));
-         let mut stdout = stdout();
-          execute!(stdout, EnableMouseCapture)?;
-          let backend = CrosstermBackend::new(stdout);
-          let mut terminal = Terminal::new(backend)?;
-        */
-        let term_arc = terminal.clone();
-        let mut term_lock = term_arc
-            .lock()
-            .map_err(|e| AnyHowError::msg(format!("{:?}", e)))?;
-        let (head_area, text_area, foot_area) = Ui::create_layout(&term_lock.get_frame());
-        let ui = Self {
-            app: Some(app),
+    pub fn new(terminal: &Term) -> Self {
+        let (head_area, text_area, foot_area) = Ui::create_layout(&terminal.get_frame());
+        Self {
             should_quit: false,
             current_window_id: Uuid::new_v4(),
             head_area,
             text_area,
             foot_area,
-            terminal: Some(terminal.clone()),
             ..Self::default()
-        };
-        Ok(ui)
+    }
     }
 
     fn handle_display_token(&mut self, token: DisplayToken) -> AnyHowResult<Vec<Token>> {
         match token {
-            DisplayToken::DrawViewPort(current_window_id, window_widgets) => {
-                let head_area = self.head_area.clone();
-                let foot_area = self.foot_area.clone();
-                let text_area = self.text_area.clone();
-                let _current_window_id = self.current_window_id.clone();
-                if let Some(mut term) = self.terminal.as_ref().and_then(|t| t.lock().ok()) {
-                    let _ = term.draw(|f| {
-                        Self::draw(
-                            current_window_id,
-                            head_area,
-                            foot_area,
-                            text_area,
-                            window_widgets,
-                            f,
-                        )
-                    });
-                }
-            }
             DisplayToken::NewWindow(_change, _direction) => {
                 /*
                 let right_offset = self
