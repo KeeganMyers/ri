@@ -1,21 +1,13 @@
 use crate::app::Mode;
 use crate::token::{
-    command_token::*,
-    display_token::{DisplayToken, WindowChange},
-    NormalToken, OperatorToken,
+    OperatorToken,
 };
-use crate::token::{get_token_from_str, AppendToken, InsertToken, Token};
-use actix::prelude::*;
 use std::sync::{Arc, Mutex};
 
 use arboard::Clipboard;
 use log::trace;
 use ropey::Rope;
 use uuid::Uuid;
-
-impl Actor for Buffer {
-    type Context = Context<Self>;
-}
 
 #[derive(Clone)]
 pub struct Buffer {
@@ -297,12 +289,12 @@ impl Buffer {
     }
 
     pub fn insert_return(&mut self) {
-                let char_idx = self.get_cursor_idx();
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                let _ = self.text.try_insert_char(char_idx, '\n');
-                self.x_pos = 0;
-                self.on_down();
+        let char_idx = self.get_cursor_idx();
+        self.past_states.push(self.text.clone());
+        self.future_states = vec![];
+        let _ = self.text.try_insert_char(char_idx, '\n');
+        self.x_pos = 0;
+        self.on_down();
     }
     pub fn insert_chars(&mut self, chars: &str) {
         self.past_states.push(self.text.clone());
@@ -313,27 +305,27 @@ impl Buffer {
         }
     }
     pub fn append_return(&mut self) {
-                let char_idx = self.get_cursor_idx() + 1;
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                if self.text.try_insert_char(char_idx, '\n').is_ok() {
-                    self.y_pos += 1;
-                    self.x_pos = 0;
-                } else if self.text.try_insert_char(char_idx - 1, '\n').is_ok() {
-                    self.y_pos += 1;
-                    self.x_pos = 0;
-                }
+        let char_idx = self.get_cursor_idx() + 1;
+        self.past_states.push(self.text.clone());
+        self.future_states = vec![];
+        if self.text.try_insert_char(char_idx, '\n').is_ok() {
+            self.y_pos += 1;
+            self.x_pos = 0;
+        } else if self.text.try_insert_char(char_idx - 1, '\n').is_ok() {
+            self.y_pos += 1;
+            self.x_pos = 0;
+        }
     }
 
     pub fn append_chars(&mut self, chars: &str) {
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                let char_idx = self.get_cursor_idx() + 1;
-                if self.text.try_insert(char_idx, &chars).is_ok() {
-                    self.x_pos += chars.len() as u16;
-                } else if self.text.try_insert(char_idx - 1, &chars).is_ok() {
-                    self.x_pos += chars.len() as u16;
-                }
+        self.past_states.push(self.text.clone());
+        self.future_states = vec![];
+        let char_idx = self.get_cursor_idx() + 1;
+        if self.text.try_insert(char_idx, &chars).is_ok() {
+            self.x_pos += chars.len() as u16;
+        } else if self.text.try_insert(char_idx - 1, &chars).is_ok() {
+            self.x_pos += chars.len() as u16;
+        }
     }
 
     pub fn new(file_name: Option<String>) -> Result<Self, std::io::Error> {
@@ -363,7 +355,7 @@ impl Buffer {
                     command_text: None,
                     operator: None::<OperatorToken>,
                     current_page: 0,
-                    page_size: 10
+                    page_size: 10,
                 })
             }
             None => Ok(Self {
@@ -382,102 +374,8 @@ impl Buffer {
                 command_text: None,
                 operator: None,
                 current_page: 0,
-                page_size: 10
+                page_size: 10,
             }),
-        }
-    }
-
-    pub fn handle_normal_token(&mut self, token: NormalToken) {
-            match token {
-            NormalToken::AddNewLineBelow => {
-                self.add_newline_below();
-                if let Some(window) = &self.window {
-                    let _ = window.try_send(Token::Display(DisplayToken::CacheNewLine(
-                        self.text.clone(),
-                        self.y_pos as usize,
-                    )));
-                    let _ =
-                        window.try_send(Token::Display(DisplayToken::UpdateWindow(WindowChange {
-                            id: self.id,
-                            x_pos: self.x_pos,
-                            y_pos: self.y_pos,
-                            mode: self.mode.clone(),
-                            title: Some(self.title.clone()),
-                            page_size: self.page_size,
-                            current_page: self.current_page,
-                            ..WindowChange::default()
-                        })));
-                }
-                let _ = self
-                    .app
-                    .try_send(Token::Display(DisplayToken::DrawViewPort(self.id, vec![])));
-            }
-            NormalToken::AddNewLineAbove => {
-                self.add_newline_above();
-                self.standard_normal_response()
-            }
-            NormalToken::Paste => {
-                self.paste_text();
-                self.standard_normal_response()
-            }
-            NormalToken::Undo => {
-                self.undo();
-                self.standard_normal_response()
-            }
-            NormalToken::Redo => {
-                self.redo();
-                self.standard_normal_response()
-            }
-            NormalToken::DeleteLine => {
-                let removed_line_index = self.y_pos;
-                self.delete_line();
-                if let Some(window) = &self.window {
-                    let _ = window.try_send(Token::Display(DisplayToken::RemoveCacheLine(
-                        self.text.clone(),
-                        removed_line_index as usize,
-                    )));
-                    let _ =
-                        window.try_send(Token::Display(DisplayToken::UpdateWindow(WindowChange {
-                            id: self.id,
-                            x_pos: self.x_pos,
-                            y_pos: self.y_pos,
-                            mode: self.mode.clone(),
-                            title: Some(self.title.clone()),
-                            page_size: self.page_size,
-                            current_page: self.current_page,
-                            ..WindowChange::default()
-                        })));
-                }
-            }
-            NormalToken::Visual => {
-                self.set_visual_mode();
-                self.standard_normal_response()
-            }
-            NormalToken::VisualLine => {
-                self.select_line();
-                self.standard_normal_response()
-            }
-            NormalToken::Last => {
-                self.x_pos = (self.current_line_len() - 2) as u16;
-                self.standard_normal_response()
-            }
-            NormalToken::LastNonBlank => {
-                self.x_pos = (self.current_line_len() - 2) as u16;
-                self.standard_normal_response()
-            }
-            NormalToken::First => {
-                self.x_pos = 0 as u16;
-                self.standard_normal_response()
-            }
-            NormalToken::FirstNonBlank => {
-                self.x_pos = 0 as u16;
-                self.standard_normal_response()
-            }
-            NormalToken::StartWord => {
-                self.x_pos = self.find_next_word();
-                self.standard_normal_response()
-            }
-            _ => (),
         }
     }
 
@@ -562,15 +460,4 @@ impl Buffer {
         Ok(vec![])
     }
         */
-}
-
-impl Handler<Token> for Buffer {
-    type Result = ();
-    fn handle(&mut self, msg: Token, _ctx: &mut Context<Self>) {
-        match msg {
-            Token::Insert(t) => self.handle_insert_token(t),
-            Token::Normal(t) => self.handle_normal_token(t),
-            _ => (),
-        }
-    }
 }

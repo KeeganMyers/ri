@@ -1,5 +1,4 @@
 use crate::app::Mode;
-use crate::window::Window;
 use anyhow::Error as AnyHowError;
 use crossterm::event::KeyEvent as Key;
 use ropey::Rope;
@@ -24,7 +23,7 @@ pub enum DisplayToken {
     SetHighlight,
     UpdateWindow(WindowChange),
     NewWindow(WindowChange, Option<Direction>),
-    DrawViewPort(Uuid, Vec<Window>),
+    DrawViewPort,
     DrawWindow,
     SetTextLayout(Direction),
     CacheWindowContent(Rope),

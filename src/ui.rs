@@ -1,7 +1,8 @@
-use crate::token::{display_token::*, Token};
-//use crate::{token::{display_token::*, command_token::*,normal_token::*, Token}};
+use crate::{
+    token::{display_token::*, Token},
+    Mode,
+};
 use crate::Window;
-use actix::prelude::*;
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use std::io::Stdout;
 use std::sync::{Arc, Mutex};
@@ -25,26 +26,27 @@ pub struct Ui {
     pub foot_area: Rect,
 }
 
-impl Actor for Ui {
-    type Context = Context<Self>;
-}
-
 impl Ui {
-    pub fn draw_view_port(&mut self, current_window_id: &Uuid, window_widgets:  Vec<&Window>,terminal: &mut Term) {
-                let head_area = self.head_area.clone();
-                let foot_area = self.foot_area.clone();
-                let text_area = self.text_area.clone();
-                let _current_window_id = self.current_window_id.clone();
-                let _ = terminal.draw(|f| {
-                    Self::draw(
-                        current_window_id,
-                        head_area,
-                        foot_area,
-                        text_area,
-                        window_widgets,
-                        f,
-                    )
-                });
+    pub fn draw_view_port(
+        &mut self,
+        current_window_id: &Uuid,
+        window_widgets: Vec<&Window>,
+        terminal: &mut Term,
+    ) {
+        let head_area = self.head_area.clone();
+        let foot_area = self.foot_area.clone();
+        let text_area = self.text_area.clone();
+        let _current_window_id = self.current_window_id.clone();
+        let _ = terminal.draw(|f| {
+            Self::draw(
+                current_window_id,
+                head_area,
+                foot_area,
+                text_area,
+                window_widgets,
+                f,
+            )
+        });
     }
 
     pub fn add_text_split(&mut self, _direction: Direction) {
@@ -147,13 +149,10 @@ impl Ui {
         .block(block.clone())
         .alignment(Alignment::Left)
         .wrap(Wrap { trim: true });
-        let paragraph2 = Paragraph::new(format!(
-            "{:?}",
-            window.clone().map(|w| w.mode.clone()).unwrap_or_default()
-        ))
-        .block(block.clone())
-        .alignment(Alignment::Center)
-        .wrap(Wrap { trim: true });
+        let paragraph2 = Paragraph::new(format!("{:?}", Mode::Normal))
+            .block(block.clone())
+            .alignment(Alignment::Center)
+            .wrap(Wrap { trim: true });
         let paragraph3 = Paragraph::new(format!(
             "{},{}",
             window.clone().map(|w| w.y_pos).unwrap_or_default(),
@@ -177,7 +176,7 @@ impl Ui {
         f.render_widget(paragraph, area);
     }
 
-    pub fn new(terminal: &Term) -> Self {
+    pub fn new(terminal: &mut Term) -> Self {
         let (head_area, text_area, foot_area) = Ui::create_layout(&terminal.get_frame());
         Self {
             should_quit: false,
@@ -186,7 +185,7 @@ impl Ui {
             text_area,
             foot_area,
             ..Self::default()
-    }
+        }
     }
 
     fn handle_display_token(&mut self, token: DisplayToken) -> AnyHowResult<Vec<Token>> {
@@ -399,29 +398,4 @@ impl Ui {
         }
     }
     */
-}
-
-impl Handler<Token> for Ui {
-    type Result = ();
-
-    fn handle(&mut self, msg: Token, _ctx: &mut Context<Self>) -> Self::Result {
-        match msg {
-            Token::Display(t) => {
-                let _ = self.handle_display_token(t);
-                ()
-            }
-            /*
-            Token::Command(t) => {
-                self.handle_command_token(&mut self.terminal, t);
-                ()
-            },
-            Token::Normal(t) => {
-                self.handle_normal_token(&mut self.terminal, t);
-                ()
-            },
-            */
-            _ => (),
-        }
-        ()
-    }
 }

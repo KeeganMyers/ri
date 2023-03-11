@@ -1,29 +1,23 @@
 use crate::{
-    Parser,
     token::{
         display_token::{DisplayToken, WindowChange},
-        get_token_from_key, get_token_from_str, CommandToken, GetState, AppendToken,Token,
-        InsertToken
+        get_token_from_str, AppendToken, CommandToken, InsertToken, NormalToken, Token,
     },
     ui::Term,
     Buffer, Ui, Window,
 };
 
-use actix::prelude::*;
-use anyhow::{Error as AnyHowError, Result as AnyHowResult};
+use anyhow::Result as AnyHowResult;
 use crossterm::{
     event::EnableMouseCapture,
     execute, terminal,
-    terminal::{disable_raw_mode, enable_raw_mode, ClearType},
+    terminal::{enable_raw_mode, ClearType},
 };
-use flume::{Receiver, Sender};
-use id_tree::{InsertBehavior::*, Node, Tree, TreeBuilder};
+use id_tree::{InsertBehavior::*, Node, Tree};
 use log::trace;
 use std::collections::HashMap;
 use std::io::stdout;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
-use tui::{backend::CrosstermBackend, layout::Direction, Terminal};
+use tui::{backend::CrosstermBackend, Terminal};
 use uuid::Uuid;
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -42,7 +36,6 @@ impl Default for Mode {
 }
 
 pub struct App {
-    pub parser: Addr<Parser>,
     pub terminal: Term,
     pub command_text: Option<String>,
     pub buffers: HashMap<Uuid, Buffer>,
@@ -56,10 +49,6 @@ pub struct App {
     pub current_file: Option<String>,
 }
 
-impl Actor for App {
-    type Context = Context<Self>;
-}
-
 impl App {
     pub fn get_mut_buffer(&mut self) -> Option<&mut Buffer> {
         self.buffers.get_mut(&self.current_buffer_id)
@@ -69,8 +58,19 @@ impl App {
         self.windows.get_mut(&self.current_window_id)
     }
 
-    pub fn render_ui(&mut self)  {
-       self.ui.draw_view_port(&self.current_window_id,self.windows.values().collect::<Vec<&Window>>(),&mut self.terminal)
+    pub fn get_mut_pair(&mut self) -> (Option<&mut Window>, Option<&mut Buffer>) {
+        (
+            self.windows.get_mut(&self.current_window_id),
+            self.buffers.get_mut(&self.current_buffer_id),
+        )
+    }
+
+    pub fn render_ui(&mut self) {
+        self.ui.draw_view_port(
+            &self.current_window_id,
+            self.windows.values().collect::<Vec<&Window>>(),
+            &mut self.terminal,
+        )
     }
 
     pub fn set_command_mode(&mut self) {
@@ -81,9 +81,10 @@ impl App {
         self.mode = Mode::Insert
     }
 
+    #[allow(dead_code)]
     pub fn set_visual_mode(&mut self) {
         self.mode = Mode::Visual;
-        self.get_mut_buffer().map(|b|  {
+        self.get_mut_buffer().map(|b| {
             let idx = b.get_cursor_idx();
             b.start_select_pos = Some(idx);
         });
@@ -97,17 +98,17 @@ impl App {
         self.mode = Mode::Normal
     }
 
-    pub fn new(file_name: Option<String>, parser: Addr<Parser>) -> AnyHowResult<App> {
+    pub fn new(file_name: Option<String>) -> AnyHowResult<App> {
         enable_raw_mode()?;
         let _ = execute!(stdout(), terminal::Clear(ClearType::All));
         let mut stdout = stdout();
         execute!(stdout, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
-        let terminal = Terminal::new(backend)?;
+        let mut terminal = Terminal::new(backend)?;
         let mut window_layout: Tree<Uuid> = Tree::new();
         let mut buffers = HashMap::new();
         let mut windows = HashMap::new();
-        let ui = Ui::new(&terminal);
+        let ui = Ui::new(&mut terminal);
         let buffer = Buffer::new(file_name.clone()).unwrap();
         let mut window = Window::new(&WindowChange {
             id: buffer.id,
@@ -131,7 +132,6 @@ impl App {
 
         Ok(Self {
             terminal,
-            parser,
             windows,
             buffers,
             ui,
@@ -141,48 +141,44 @@ impl App {
             current_buffer_id,
             current_window_id,
             mode: Mode::Normal,
-            command_text: None
+            command_text: None,
         })
     }
 
     pub fn handle_insert_token(&mut self, token: InsertToken) {
         match token {
             InsertToken::Append(chars) => {
-                if let Some(buffer) = self.get_mut_buffer() {
+                if let (Some(window), Some(buffer)) = self.get_mut_pair() {
                     buffer.insert_chars(&chars);
-                  let change = WindowChange {
-                            id: buffer.id,
-                            x_pos: buffer.x_pos,
-                            y_pos: buffer.y_pos,
-                            mode: buffer.mode.clone(),
-                            title: Some(buffer.title.clone()),
-                            page_size: buffer.page_size,
-                            current_page: buffer.current_page,
-                            ..WindowChange::default()
-                        };
-                    self.get_mut_window().map(|w| {
-                        w.cache_current_line(&buffer.text, buffer.y_pos as usize);
-                        w.update(change)
-                    });
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    window.cache_current_line(&buffer.text, buffer.y_pos.clone() as usize);
+                    window.update(change);
                 }
             }
             InsertToken::Remove => {
-                if let Some(buffer) = self.get_mut_buffer() {
+                if let (Some(window), Some(buffer)) = self.get_mut_pair() {
                     buffer.remove_char();
-                  let change = WindowChange {
-                            id: buffer.id,
-                            x_pos: buffer.x_pos,
-                            y_pos: buffer.y_pos,
-                            mode: buffer.mode.clone(),
-                            title: Some(buffer.title.clone()),
-                            page_size: buffer.page_size,
-                            current_page: buffer.current_page,
-                            ..WindowChange::default()
-                        };
-                    self.get_mut_window().map(|w| {
-                        w.cache_current_line(&buffer.text, buffer.y_pos as usize);
-                        w.update(change)
-                    });
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    window.cache_current_line(&buffer.text, buffer.y_pos as usize);
+                    window.update(change)
                 }
             }
             InsertToken::Esc => {
@@ -190,27 +186,24 @@ impl App {
                 self.get_mut_buffer().map(|b| b.start_select_pos = None);
             }
             InsertToken::Enter => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                  buffer.insert_return();
-                  let change = WindowChange {
-                            id: buffer.id,
-                            x_pos: buffer.x_pos,
-                            y_pos: buffer.y_pos,
-                            mode: buffer.mode.clone(),
-                            title: Some(buffer.title.clone()),
-                            page_size: buffer.page_size,
-                            current_page: buffer.current_page,
-                            ..WindowChange::default()
-                        };
-                    self.get_mut_window().map(|w| {
-                        w.cache_new_line(&buffer.text, buffer.y_pos as usize);
-                        w.cache_line_numbers(&buffer.text);
-                        w.update(change)
-                    });
+                if let (Some(window), Some(buffer)) = self.get_mut_pair() {
+                    buffer.insert_return();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    window.cache_new_line(&buffer.text, buffer.y_pos as usize);
+                    window.cache_line_numbers(&buffer.text);
+                    window.update(change)
                 }
                 self.render_ui();
             }
-            _ => ()
         }
     }
 
@@ -218,94 +211,304 @@ impl App {
         match token {
             NormalToken::Up => {
                 if let Some(buffer) = self.get_mut_buffer() {
-                  buffer.on_up();
-                  let change = WindowChange {
-                            id: buffer.id,
-                            x_pos: buffer.x_pos,
-                            y_pos: buffer.y_pos,
-                            mode: buffer.mode.clone(),
-                            title: Some(buffer.title.clone()),
-                            page_size: buffer.page_size,
-                            current_page: buffer.current_page,
-                            ..WindowChange::default()
-                        };
-                    self.get_mut_window().map(|w| {
-                        w.update(change)
-                    });
+                    buffer.on_up();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
                 }
                 self.render_ui();
-            },
+            }
             NormalToken::Down => {
                 if let Some(buffer) = self.get_mut_buffer() {
-                  buffer.on_down();
-                  let change = WindowChange {
-                            id: buffer.id,
-                            x_pos: buffer.x_pos,
-                            y_pos: buffer.y_pos,
-                            mode: buffer.mode.clone(),
-                            title: Some(buffer.title.clone()),
-                            page_size: buffer.page_size,
-                            current_page: buffer.current_page,
-                            ..WindowChange::default()
-                        };
-                    self.get_mut_window().map(|w| {
-                        w.update(change)
-                    });
+                    buffer.on_down();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
                 }
                 self.render_ui();
-            },
+            }
             NormalToken::Left => {
                 if let Some(buffer) = self.get_mut_buffer() {
-                  buffer.on_left();
-                  let change = WindowChange {
-                            id: buffer.id,
-                            x_pos: buffer.x_pos,
-                            y_pos: buffer.y_pos,
-                            mode: buffer.mode.clone(),
-                            title: Some(buffer.title.clone()),
-                            page_size: buffer.page_size,
-                            current_page: buffer.current_page,
-                            ..WindowChange::default()
-                        };
-                    self.get_mut_window().map(|w| {
-                        w.update(change)
-                    });
+                    buffer.on_left();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
                 }
                 self.render_ui();
-            },
+            }
             NormalToken::Right => {
                 if let Some(buffer) = self.get_mut_buffer() {
-                  buffer.on_right();
-                  let change = WindowChange {
-                            id: buffer.id,
-                            x_pos: buffer.x_pos,
-                            y_pos: buffer.y_pos,
-                            mode: buffer.mode.clone(),
-                            title: Some(buffer.title.clone()),
-                            page_size: buffer.page_size,
-                            current_page: buffer.current_page,
-                            ..WindowChange::default()
-                        };
-                    self.get_mut_window().map(|w| {
-                        w.update(change)
-                    });
+                    buffer.on_right();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
                 }
                 self.render_ui();
-            },
+            }
             NormalToken::SwitchToCommand => {
                 self.command_text = Some("".to_string());
                 self.set_command_mode();
                 self.render_ui();
-            },
+            }
             NormalToken::SwitchToInsert => {
                 self.set_insert_mode();
                 self.render_ui();
-            },
+            }
             NormalToken::SwitchToAppend => {
                 self.set_append_mode();
                 self.render_ui();
-            },
-            _ => ()
+            }
+            NormalToken::AddNewLineBelow => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.add_newline_below();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+                self.render_ui();
+            }
+            NormalToken::AddNewLineAbove => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.add_newline_above();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+                self.render_ui();
+            }
+            NormalToken::Paste => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.paste_text();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+                self.render_ui();
+            }
+            NormalToken::Undo => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.undo();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+                self.render_ui();
+            }
+            NormalToken::Redo => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.redo();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+                self.render_ui();
+            }
+            NormalToken::DeleteLine => {
+                if let (Some(window), Some(buffer)) = self.get_mut_pair() {
+                    let removed_line_index = buffer.y_pos;
+                    buffer.delete_line();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    let _ = window.remove_cache_line(removed_line_index as usize);
+                    window.cache_line_numbers(&buffer.text);
+                    window.update(change)
+                }
+
+                self.render_ui();
+            }
+            NormalToken::Visual => {
+                self.get_mut_buffer().map(|b| b.set_visual_mode());
+                self.render_ui();
+            }
+            NormalToken::VisualLine => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.select_line();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            NormalToken::Last => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = (buffer.current_line_len() - 2) as u16;
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            NormalToken::LastNonBlank => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = (buffer.current_line_len() - 2) as u16;
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            NormalToken::First => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = 0 as u16;
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            NormalToken::FirstNonBlank => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = 0 as u16;
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            NormalToken::StartWord => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = buffer.find_next_word();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        mode: buffer.mode.clone(),
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            _ => (),
         }
     }
 
@@ -313,13 +516,13 @@ impl App {
         match token {
             AppendToken::Enter => {
                 self.get_mut_buffer().map(|b| b.append_return());
-            },
+            }
             AppendToken::Remove => {
                 self.get_mut_buffer().map(|b| b.remove_char());
-            },
+            }
             AppendToken::Append(chars) => {
                 self.get_mut_buffer().map(|b| b.append_chars(&chars));
-            },
+            }
             AppendToken::Esc => {
                 self.get_mut_buffer().map(|b| b.start_select_pos = None);
                 self.set_normal_mode();
@@ -331,12 +534,11 @@ impl App {
         match token {
             CommandToken::Write => {
                 self.get_mut_buffer().and_then(|b| b.on_save().ok());
-                let windows = self.windows.clone();
                 self.render_ui();
-            },
+            }
             CommandToken::Split(_) => {
                 self.set_normal_mode();
-            },
+            }
             CommandToken::VerticalSplit(_) => {
                 self.set_normal_mode();
             }
@@ -460,19 +662,14 @@ impl App {
             }
             CommandToken::SetMode(mode) => {
                 self.mode = mode.clone();
-                let _ = self.parser.try_send(Token::Command(CommandToken::SetMode(mode)));
             }
             _ => (),
         }
     }
 
-    pub fn handle_display_token(
-        &mut self,
-        token: DisplayToken,
-        ctx: &mut Context<Self>,
-    ) {
+    pub fn handle_display_token(&mut self, token: DisplayToken) {
         match token {
-            DisplayToken::DrawViewPort(_, _) => {
+            DisplayToken::DrawViewPort => {
                 trace!("app attempting to handle DrawViewPort");
                 self.render_ui();
             }
@@ -480,29 +677,15 @@ impl App {
         };
     }
 
-    pub fn handle_token(
-        &mut self,
-        token: Token,
-        ctx: &mut Context<Self>,
-    ) {
+    pub fn handle_token(&mut self, token: Token) {
         let _ = match token {
             Token::Command(t) => self.handle_command_token(t),
             Token::Append(t) => self.handle_append_token(t),
             Token::Normal(t) => self.handle_normal_token(t),
             Token::Insert(t) => self.handle_insert_token(t),
-            Token::Display(t) => {
-                self.handle_display_token(t, ctx)
-            }
+            Token::Display(t) => self.handle_display_token(t),
             _ => (),
         };
     }
 }
 
-impl Handler<Token> for App {
-    type Result = ();
-
-    fn handle(&mut self, msg: Token, ctx: &mut Context<Self>) -> Self::Result {
-        let _ = self.handle_token(msg, ctx);
-        ()
-    }
-}

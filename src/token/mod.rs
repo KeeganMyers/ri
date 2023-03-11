@@ -9,9 +9,7 @@ use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use crossterm::event::KeyEvent as Key;
 use std::convert::TryFrom;
 
-use crate::window::Window;
 use crate::Mode;
-use actix::prelude::*;
 pub use append_token::*;
 pub use command_token::*;
 pub use display_token::*;
@@ -20,8 +18,6 @@ pub use normal_token::*;
 pub use operator_token::*;
 pub use range_token::*;
 
-#[derive(Message)]
-#[rtype(result = "()")]
 #[derive(Clone)]
 pub enum Token {
     Append(AppendToken),
@@ -33,8 +29,6 @@ pub enum Token {
     Display(DisplayToken),
 }
 
-#[derive(Message)]
-#[rtype(result = "Window")]
 #[derive(Clone, Debug)]
 pub struct GetState {}
 

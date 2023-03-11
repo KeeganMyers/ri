@@ -1,11 +1,10 @@
 use crate::{
     reflow::{LineComposer, WordWrapper},
-    token::{display_token::*, GetState, Token},
+    token::{display_token::*},
 };
-use actix::prelude::*;
 use ropey::Rope;
 use std::iter;
-use std::sync::{Arc};
+use std::sync::Arc;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::Style as SyntectStyle;
 use syntect::util::LinesWithEndings;
@@ -57,7 +56,7 @@ impl<'a> From<&CachedSpan> for Span<'a> {
     }
 }
 
-#[derive(Default, Clone, MessageResponse)]
+#[derive(Default, Clone)]
 pub struct Window {
     pub id: Uuid,
     pub title: Option<String>,
@@ -127,23 +126,22 @@ impl Widget for &Window {
 }
 
 impl Window {
-
     pub fn cache_window_content(&mut self, text: &Rope) {
         self.cache_formatted_text(&text);
         self.cache_line_numbers(&text);
     }
 
     pub fn set_highlight(&mut self) {
-                let ps = SyntaxSet::load_defaults_newlines();
-                let ts = ThemeSet::load_defaults();
-                let syntax = ps.find_syntax_by_extension("rs").clone();
-                let theme = ts.themes["base16-ocean.dark"].clone();
-                self.syntax_set = Some(ps.clone());
-                self.theme_set = Some(Arc::new(ts));
-                if let Some(s) = syntax {
-                    self.syntax = Some(s.clone());
-                }
-                self.theme = Some(theme);
+        let ps = SyntaxSet::load_defaults_newlines();
+        let ts = ThemeSet::load_defaults();
+        let syntax = ps.find_syntax_by_extension("rs").clone();
+        let theme = ts.themes["base16-ocean.dark"].clone();
+        self.syntax_set = Some(ps.clone());
+        self.theme_set = Some(Arc::new(ts));
+        if let Some(s) = syntax {
+            self.syntax = Some(s.clone());
+        }
+        self.theme = Some(theme);
     }
 
     fn convert_style(style: SyntectStyle) -> Style {
@@ -329,68 +327,13 @@ impl Window {
         None
     }
 
-    pub fn update(&mut self,change: WindowChange) {
-                self.x_pos = change.x_pos;
-                self.y_pos = change.y_pos;
-                self.title = change.title;
-                self.page_size = change.page_size;
-                self.current_page = change.current_page;
-                self.y_offset = 0;
-                self.x_offset = 4;
-    }
-
-    fn handle_display_token(&mut self, token: DisplayToken) {
-        match token {
-            DisplayToken::UpdateWindow(change) => {
-            }
-            DisplayToken::CloseWindow(_) => {
-                unimplemented!();
-            }
-            DisplayToken::AppendCommand(_) => {
-                unimplemented!();
-            }
-            DisplayToken::CacheCurrentLine(text, line_index) => {
-                let _ = self.cache_current_line(&text, line_index);
-            }
-            DisplayToken::CacheWindowContent(text) => {
-                self.cache_formatted_text(&text);
-                self.cache_line_numbers(&text);
-            }
-            DisplayToken::CacheNewLine(text, line_index) => {
-                self.cache_new_line(&text, line_index);
-                self.cache_line_numbers(&text);
-            }
-            DisplayToken::RemoveCacheLine(text, line_index) => {
-                let _ = self.remove_cache_line(line_index);
-                self.cache_line_numbers(&text);
-            }
-            _ => (),
-        };
-        ()
-    }
-}
-
-impl Actor for Window {
-    type Context = Context<Self>;
-}
-
-impl Handler<Token> for Window {
-    type Result = ();
-
-    fn handle(&mut self, msg: Token, _ctx: &mut Context<Self>) -> Self::Result {
-        match msg {
-            Token::Display(t) => {
-                self.handle_display_token(t);
-            }
-            _ => (),
-        }
-    }
-}
-
-impl Handler<GetState> for Window {
-    type Result = Window;
-
-    fn handle(&mut self, _msg: GetState, _ctx: &mut Context<Self>) -> Self::Result {
-        self.clone()
+    pub fn update(&mut self, change: WindowChange) {
+        self.x_pos = change.x_pos;
+        self.y_pos = change.y_pos;
+        self.title = change.title;
+        self.page_size = change.page_size;
+        self.current_page = change.current_page;
+        self.y_offset = 0;
+        self.x_offset = 4;
     }
 }
