@@ -309,8 +309,8 @@ impl Buffer {
     pub fn new(file_name: Option<String>) -> Result<Self, std::io::Error> {
         match file_name {
             Some(file_path) => {
-                let rope = if std::path::Path::new(&file_path).exists() {
-                    let file = std::fs::File::open(&file_path)?;
+                let rope = if std::path::Path::new(&file_path.trim()).exists() {
+                    let file = std::fs::File::open(&file_path.trim())?;
                     let buf_reader = std::io::BufReader::new(file);
                     Rope::from_reader(buf_reader)?
                 } else {
@@ -328,7 +328,7 @@ impl Buffer {
                     future_states: vec![],
                     x_pos: 0,
                     y_pos: 0,
-                    file_path: Some(file_path),
+                    file_path: Some(file_path.trim().to_owned()),
                     text: rope,
                     command_text: None,
                     operator: None::<OperatorToken>,

@@ -56,43 +56,19 @@ impl Ui {
         });
     }
 
-    pub fn add_text_split(&mut self, _direction: Direction) {
-        /*
-        let text_area = if let Some(area) = self
-            .windows
-            .get(&self.current_window_id)
-            .and_then(|w| w.area)
+    pub fn split_ui(&self, window: &Window,direction: Direction) -> Vec<Rect> {
+        let text_area = if let Some(area) = window.area
         {
             area
         } else {
             self.text_area
         };
-        let text_splits = Layout::default()
+        Layout::default()
             .direction(direction)
             .constraints(
-                self.windows
-                    .values()
-                    .map(|_w| Constraint::Percentage(50))
-                    .collect::<Vec<Constraint>>()
-                    .as_ref(),
+                vec![Constraint::Percentage(50),Constraint::Percentage(50)]
             )
-            .split(text_area);
-        let mut sorted_windows = self
-            .windows
-            .values()
-            .map(|w| w.clone())
-            .collect::<Vec<Window>>();
-        sorted_windows.sort_by(|w_a, w_b| w_a.get_origin().cmp(&w_b.get_origin()));
-
-        for (window_id, split) in sorted_windows.into_iter().map(|w| w.id).zip(text_splits) {
-            if let Some(window) = self.windows.get_mut(&window_id) {
-                window.outer_areas.push(window.area);
-                window.area = Some(split);
-                window.bottom = Some(split.bottom());
-                window.right = Some(split.right());
-            }
-        }
-        */
+            .split(text_area)
     }
 
     /*
@@ -249,7 +225,7 @@ impl Ui {
                 */
             }
             DisplayToken::SetTextLayout(direction) => {
-                self.add_text_split(direction);
+                //self.add_text_split(direction);
             }
             DisplayToken::CloseWindow(_id) => {
                 /*

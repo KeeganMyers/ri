@@ -17,7 +17,7 @@ use id_tree::{InsertBehavior::*, Node, Tree};
 use log::trace;
 use std::collections::HashMap;
 use std::io::stdout;
-use tui::{backend::CrosstermBackend, Terminal, layout::Rect};
+use tui::{backend::CrosstermBackend, Terminal, layout::{Direction,Rect}};
 use uuid::Uuid;
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -57,6 +57,10 @@ impl App {
 
     pub fn get_buffer(&self) -> Option<&Buffer> {
         self.buffers.get(&self.current_buffer_id)
+    }
+
+    pub fn get_window(&self) -> Option<&Window> {
+        self.windows.get(&self.current_window_id)
     }
 
     pub fn get_mut_window(&mut self) -> Option<&mut Window> {
@@ -104,6 +108,7 @@ impl App {
     }
 
     pub fn set_normal_mode(&mut self) {
+        self.command_text = Some("".to_string());
         self.mode = Mode::Normal
     }
 
@@ -119,11 +124,12 @@ impl App {
         let mut windows = HashMap::new();
         let ui = Ui::new(&mut terminal);
         let root_node = window_layout.insert(Node::new(ui.text_area), AsRoot)?;
-        let buffer = Buffer::new(file_name.clone()).unwrap();
+        let buffer = Buffer::new(file_name.clone())?;
         let mut window = Window::new(&WindowChange {
             id: buffer.id,
             x_pos: buffer.x_pos,
             y_pos: buffer.y_pos,
+            area: Some(ui.text_area.clone()),
             title: Some(buffer.title.clone()),
             page_size: buffer.page_size,
             node_id: Some(root_node.clone()),
@@ -134,10 +140,8 @@ impl App {
         let current_window_id = window.id.clone();
         window.set_highlight();
         window.cache_window_content(&buffer.text);
-        window.area = Some(ui.text_area.clone());
         buffers.insert(buffer.id, buffer);
         windows.insert(current_window_id, window);
-        //self.render_ui();
 
         Ok(Self {
             terminal,
@@ -152,6 +156,46 @@ impl App {
             mode: Mode::Normal,
             command_text: None,
         })
+    }
+
+    pub fn new_split(&mut self,file_name: Option<String>,direction: Direction) -> AnyHowResult<()> {
+        if let Some(current_window) = self.get_window().clone() {
+            if let Some(node_id) = current_window.node_id.clone() {
+                let buffer = Buffer::new(file_name.clone())?;
+
+                if let [split1,split2,..] = self.ui.split_ui(&current_window,direction)[..] {
+                let node_id_1 = self.window_layout.insert(Node::new(split1), UnderNode(&node_id))?;
+                let node_id_2 = self.window_layout.insert(Node::new(split2), UnderNode(&node_id))?;
+                let mut window = Window::new(&WindowChange {
+                    id: buffer.id,
+                    area: Some(split2),
+                    x_pos: buffer.x_pos,
+                    y_pos: buffer.y_pos,
+                    title: Some(buffer.title.clone()),
+                    page_size: buffer.page_size,
+                    node_id: Some(node_id_2.clone()),
+                    current_page: buffer.current_page,
+                    ..WindowChange::default()
+                });
+                let current_buffer_id = buffer.id.clone();
+                let current_window_id = window.id.clone();
+                window.set_highlight();
+                window.cache_window_content(&buffer.text);
+                self.current_file = buffer.file_path.clone();
+                self.buffers.insert(current_buffer_id, buffer);
+                self.windows.insert(current_window_id, window);
+                self.get_mut_window().map(|w| {
+                    w.node_id = Some(node_id_1);
+                    w.area = Some(split1);
+                    w.x_offset = split1.x + 4;
+                    w.y_offset = split1.y + 1;
+                });
+                self.current_buffer_id = current_buffer_id;
+                self.current_window_id = current_window_id;
+             }
+            }
+        }
+        Ok(())
     }
 
     pub fn handle_insert_token(&mut self, token: InsertToken) {
@@ -528,11 +572,15 @@ impl App {
                 self.get_mut_buffer().and_then(|b| b.on_save().ok());
                 self.render_ui();
             }
-            CommandToken::Split(_) => {
+            CommandToken::Split(file_name) => {
+                let _ = self.new_split(file_name,Direction::Vertical);
                 self.set_normal_mode();
+                self.render_ui();
             }
-            CommandToken::VerticalSplit(_) => {
+            CommandToken::VerticalSplit(file_name) => {
+                let _ = self.new_split(file_name,Direction::Horizontal);
                 self.set_normal_mode();
+                self.render_ui();
             }
             CommandToken::Esc => {
                 self.set_normal_mode();
@@ -562,85 +610,10 @@ impl App {
                 if self.buffers.is_empty() {
                     self.should_quit = true;
                 }
+                self.set_normal_mode();
                 self.render_ui();
             }
             CommandToken::TabNew => (),
-            CommandToken::Split(f_name) => {
-                /*
-                if let Some(file_name) = f_name {
-                    let buffer = if let Ok(buffer) = Buffer::new(Some(file_name.trim().to_string()))
-                    {
-                        buffer
-                    } else {
-                        Buffer::new(None).unwrap()
-                    };
-                    let response = Ok(vec![
-                        Token::Display(DisplayToken::NewWindow(
-                            WindowChange {
-                                id: buffer.id,
-                                x_pos: buffer.x_pos,
-                                y_pos: buffer.y_pos,
-                                mode: buffer.mode.clone(),
-                                title: Some(buffer.title.clone()),
-                                page_size: buffer.page_size,
-                                current_page: buffer.current_page,
-                                ..WindowChange::default()
-                            },
-                            Some(Direction::Vertical),
-                        )),
-                        Token::Display(DisplayToken::SetTextLayout(Direction::Vertical)),
-                        Token::Display(DisplayToken::CacheWindowContent(
-                            buffer.id,
-                            buffer.text.clone(),
-                        )),
-                        //Token::Display(DisplayToken::DrawViewPort),
-                    ]);
-                    self.current_buffer_id = buffer.id;
-                    //self.buffers.insert(buffer.id, buffer);
-                    response
-                } else {
-                    Ok(vec![])
-                }
-                */
-            }
-            CommandToken::VerticalSplit(f_name) => {
-                /*
-                if let Some(file_name) = f_name {
-                    let buffer = if let Ok(buffer) = Buffer::new(Some(file_name.trim().to_string()))
-                    {
-                        buffer
-                    } else {
-                        Buffer::new(None).unwrap()
-                    };
-                    let response = Ok(vec![
-                        Token::Display(DisplayToken::NewWindow(
-                            WindowChange {
-                                id: buffer.id,
-                                x_pos: buffer.x_pos,
-                                y_pos: buffer.y_pos,
-                                mode: buffer.mode.clone(),
-                                title: Some(buffer.title.clone()),
-                                page_size: buffer.page_size,
-                                current_page: buffer.current_page,
-                                ..WindowChange::default()
-                            },
-                            Some(Direction::Horizontal),
-                        )),
-                        Token::Display(DisplayToken::SetTextLayout(Direction::Horizontal)),
-                        Token::Display(DisplayToken::CacheWindowContent(
-                            buffer.id,
-                            buffer.text.clone(),
-                        )),
-                        //Token::Display(DisplayToken::DrawViewPort),
-                    ]);
-                    self.current_buffer_id = buffer.id;
-                    //self.buffers.insert(buffer.id, buffer);
-                    response
-                } else {
-                    Ok(vec![])
-                }
-                */
-            }
             CommandToken::Enter => {
                 if let Some(command_text) = &self.command_text {
                     if let Ok(Token::Command(command)) =

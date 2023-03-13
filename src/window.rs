@@ -71,12 +71,6 @@ pub struct Window {
     pub current_page: u16,
     pub area: Option<Rect>,
     pub command_text: Option<String>,
-    pub bottom: Option<u16>,
-    pub right: Option<u16>,
-    pub window_left: Option<Uuid>,
-    pub window_right: Option<Uuid>,
-    pub window_up: Option<Uuid>,
-    pub window_down: Option<Uuid>,
     pub highlight_cache: Vec<Vec<CachedSpan>>,
     pub line_num_cache: Vec<Vec<CachedSpan>>,
     pub syntax_set: Option<SyntaxSet>,
@@ -282,17 +276,33 @@ impl Window {
     }
 
     pub fn new(change: &WindowChange) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            x_pos: change.x_pos,
-            y_pos: change.y_pos,
-            title: change.title.clone(),
-            page_size: change.page_size,
-            current_page: change.current_page,
-            y_offset: 1,
-            x_offset: 4,
-            node_id: change.node_id.clone(),
-            ..Window::default()
+        if let Some(area) = change.area {
+            Self {
+                id: Uuid::new_v4(),
+                x_pos: change.x_pos,
+                y_pos: change.y_pos,
+                title: change.title.clone(),
+                page_size: change.page_size,
+                current_page: change.current_page,
+                area: Some(area),
+                y_offset: area.y + 1,
+                x_offset: area.x + 4,
+                node_id: change.node_id.clone(),
+                ..Window::default()
+            }
+        } else {
+            Self {
+                id: Uuid::new_v4(),
+                x_pos: change.x_pos,
+                y_pos: change.y_pos,
+                title: change.title.clone(),
+                page_size: change.page_size,
+                current_page: change.current_page,
+                y_offset: 1,
+                x_offset: 4,
+                node_id: change.node_id.clone(),
+                ..Window::default()
+            }
         }
     }
     pub fn cursor_x_pos(&self) -> u16 {
@@ -333,7 +343,5 @@ impl Window {
         self.title = change.title;
         self.page_size = change.page_size;
         self.current_page = change.current_page;
-        self.y_offset = 0;
-        self.x_offset = 4;
     }
 }

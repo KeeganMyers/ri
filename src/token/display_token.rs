@@ -1,4 +1,3 @@
-use crate::app::Mode;
 use anyhow::Error as AnyHowError;
 use crossterm::event::KeyEvent as Key;
 use ropey::Rope;
@@ -6,6 +5,7 @@ use std::{convert::TryFrom, iter::Iterator};
 use tui::layout::Direction;
 use uuid::Uuid;
 use id_tree::NodeId;
+use tui::layout::Rect;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WindowChange {
@@ -15,7 +15,8 @@ pub struct WindowChange {
     pub title: Option<String>,
     pub page_size: u16,
     pub current_page: u16,
-    pub node_id: Option<NodeId>
+    pub node_id: Option<NodeId>,
+    pub area: Option<Rect>
 }
 
 #[derive(Clone)]
