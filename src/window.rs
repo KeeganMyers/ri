@@ -3,6 +3,7 @@ use crate::{
     token::{display_token::*},
 };
 use ropey::Rope;
+use id_tree::NodeId;
 use std::iter;
 use std::sync::Arc;
 use syntect::easy::HighlightLines;
@@ -61,14 +62,13 @@ pub struct Window {
     pub id: Uuid,
     pub title: Option<String>,
     pub current_percent_size: u16,
-    pub buffer_id: Uuid,
     pub y_offset: u16,
     pub x_offset: u16,
     pub x_pos: u16,
+    pub node_id: Option<NodeId>,
     pub y_pos: u16,
     pub page_size: u16,
     pub current_page: u16,
-    pub outer_areas: Vec<Option<Rect>>,
     pub area: Option<Rect>,
     pub command_text: Option<String>,
     pub bottom: Option<u16>,
@@ -284,14 +284,14 @@ impl Window {
     pub fn new(change: &WindowChange) -> Self {
         Self {
             id: Uuid::new_v4(),
-            buffer_id: change.id,
             x_pos: change.x_pos,
             y_pos: change.y_pos,
             title: change.title.clone(),
             page_size: change.page_size,
             current_page: change.current_page,
-            y_offset: 0,
+            y_offset: 1,
             x_offset: 4,
+            node_id: change.node_id.clone(),
             ..Window::default()
         }
     }

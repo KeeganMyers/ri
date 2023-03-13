@@ -17,7 +17,7 @@ use id_tree::{InsertBehavior::*, Node, Tree};
 use log::trace;
 use std::collections::HashMap;
 use std::io::stdout;
-use tui::{backend::CrosstermBackend, Terminal};
+use tui::{backend::CrosstermBackend, Terminal, layout::Rect};
 use uuid::Uuid;
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -41,7 +41,7 @@ pub struct App {
     pub buffers: HashMap<Uuid, Buffer>,
     pub ui: Ui,
     pub windows: HashMap<Uuid, Window>,
-    pub window_layout: Tree<Uuid>,
+    pub window_layout: Tree<Rect>,
     pub current_window_id: Uuid,
     pub current_buffer_id: Uuid,
     pub should_quit: bool,
@@ -52,6 +52,11 @@ pub struct App {
 impl App {
     pub fn get_mut_buffer(&mut self) -> Option<&mut Buffer> {
         self.buffers.get_mut(&self.current_buffer_id)
+    }
+
+
+    pub fn get_buffer(&self) -> Option<&Buffer> {
+        self.buffers.get(&self.current_buffer_id)
     }
 
     pub fn get_mut_window(&mut self) -> Option<&mut Window> {
@@ -68,6 +73,10 @@ impl App {
     pub fn render_ui(&mut self) {
         self.ui.draw_view_port(
             &self.current_window_id,
+            &self.current_file,
+            &self.mode,
+            self.get_buffer().map(|b| (b.x_pos,b.y_pos)),
+            &self.command_text,
             self.windows.values().collect::<Vec<&Window>>(),
             &mut self.terminal,
         )
@@ -105,18 +114,19 @@ impl App {
         execute!(stdout, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
-        let mut window_layout: Tree<Uuid> = Tree::new();
+        let mut window_layout: Tree<Rect> = Tree::new();
         let mut buffers = HashMap::new();
         let mut windows = HashMap::new();
         let ui = Ui::new(&mut terminal);
+        let root_node = window_layout.insert(Node::new(ui.text_area), AsRoot)?;
         let buffer = Buffer::new(file_name.clone()).unwrap();
         let mut window = Window::new(&WindowChange {
             id: buffer.id,
             x_pos: buffer.x_pos,
             y_pos: buffer.y_pos,
-            mode: buffer.mode.clone(),
             title: Some(buffer.title.clone()),
             page_size: buffer.page_size,
+            node_id: Some(root_node.clone()),
             current_page: buffer.current_page,
             ..WindowChange::default()
         });
@@ -125,7 +135,6 @@ impl App {
         window.set_highlight();
         window.cache_window_content(&buffer.text);
         window.area = Some(ui.text_area.clone());
-        let _ = window_layout.insert(Node::new(current_window_id), AsRoot);
         buffers.insert(buffer.id, buffer);
         windows.insert(current_window_id, window);
         //self.render_ui();
@@ -154,7 +163,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -171,7 +179,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -192,7 +199,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -216,7 +222,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -233,7 +238,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -250,7 +254,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -267,7 +270,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -297,7 +299,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -314,7 +315,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -331,7 +331,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -348,7 +347,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -365,7 +363,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -383,7 +380,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -397,7 +393,7 @@ impl App {
                 self.render_ui();
             }
             NormalToken::Visual => {
-                self.get_mut_buffer().map(|b| b.set_visual_mode());
+                self.set_visual_mode();
                 self.render_ui();
             }
             NormalToken::VisualLine => {
@@ -407,7 +403,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -425,7 +420,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -443,7 +437,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -461,7 +454,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -479,7 +471,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -497,7 +488,6 @@ impl App {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
                         y_pos: buffer.y_pos,
-                        mode: buffer.mode.clone(),
                         title: Some(buffer.title.clone()),
                         page_size: buffer.page_size,
                         current_page: buffer.current_page,
@@ -519,9 +509,11 @@ impl App {
             }
             AppendToken::Remove => {
                 self.get_mut_buffer().map(|b| b.remove_char());
+                self.render_ui();
             }
             AppendToken::Append(chars) => {
                 self.get_mut_buffer().map(|b| b.append_chars(&chars));
+                self.render_ui();
             }
             AppendToken::Esc => {
                 self.get_mut_buffer().map(|b| b.start_select_pos = None);
@@ -551,12 +543,14 @@ impl App {
                     t.push_str(&chars);
                     t
                 });
+                self.render_ui();
             }
             CommandToken::Remove => {
                 self.command_text = self.command_text.clone().map(|mut t| {
                     t.truncate(t.len() - 1);
                     t
                 });
+                self.render_ui();
             }
             CommandToken::NoOp => (),
             CommandToken::Quit => {
@@ -568,6 +562,7 @@ impl App {
                 if self.buffers.is_empty() {
                     self.should_quit = true;
                 }
+                self.render_ui();
             }
             CommandToken::TabNew => (),
             CommandToken::Split(f_name) => {
@@ -659,9 +654,11 @@ impl App {
                 if let Some(_buffer) = self.buffers.get(&id) {
                     self.current_buffer_id = id;
                 }
+                self.render_ui();
             }
             CommandToken::SetMode(mode) => {
                 self.mode = mode.clone();
+                self.render_ui();
             }
             _ => (),
         }

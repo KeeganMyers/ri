@@ -5,17 +5,17 @@ use ropey::Rope;
 use std::{convert::TryFrom, iter::Iterator};
 use tui::layout::Direction;
 use uuid::Uuid;
+use id_tree::NodeId;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WindowChange {
     pub id: Uuid,
     pub x_pos: u16,
     pub y_pos: u16,
-    pub command_text: Option<String>,
-    pub mode: Mode,
     pub title: Option<String>,
     pub page_size: u16,
     pub current_page: u16,
+    pub node_id: Option<NodeId>
 }
 
 #[derive(Clone)]

@@ -3,9 +3,8 @@ use crate::{
     Mode,
 };
 use crate::Window;
-use anyhow::{Error as AnyHowError, Result as AnyHowResult};
+use anyhow::{Result as AnyHowResult};
 use std::io::Stdout;
-use std::sync::{Arc, Mutex};
 
 use tui::{
     backend::{Backend, CrosstermBackend},
@@ -30,6 +29,10 @@ impl Ui {
     pub fn draw_view_port(
         &mut self,
         current_window_id: &Uuid,
+        title: &Option<String>,
+        mode: &Mode,
+        coords: Option<(u16,u16)>,
+        command_text: &Option<String>,
         window_widgets: Vec<&Window>,
         terminal: &mut Term,
     ) {
@@ -40,6 +43,10 @@ impl Ui {
         let _ = terminal.draw(|f| {
             Self::draw(
                 current_window_id,
+                title,
+                mode,
+                coords,
+                command_text,
                 head_area,
                 foot_area,
                 text_area,
@@ -100,6 +107,10 @@ impl Ui {
 
     pub fn draw<'a, B: 'a>(
         current_window_id: &Uuid,
+        title: &Option<String>,
+        mode: &Mode,
+        coords: Option<(u16,u16)>,
+        command_text: &Option<String>,
         head_area: Rect,
         foot_area: Rect,
         text_area: Rect,
@@ -108,7 +119,7 @@ impl Ui {
     ) where
         B: Backend,
     {
-        Self::draw_header(None, f, head_area);
+        Self::draw_header(title, f, head_area);
 
         for window in window_widgets {
             if window.id == *current_window_id {
@@ -118,7 +129,7 @@ impl Ui {
             f.render_widget(window, text_area);
         }
 
-        Self::draw_footer(None, f, foot_area);
+        Self::draw_footer(mode,coords, command_text,f, foot_area);
     }
 
     fn create_layout<B: Backend>(frame: &Frame<B>) -> (Rect, Rect, Rect) {
@@ -135,28 +146,23 @@ impl Ui {
         (area[0], area[1], area[2])
     }
 
-    fn draw_footer<B>(window: Option<Window>, f: &mut Frame<B>, area: Rect)
+    fn draw_footer<B>(mode: &Mode, coords: Option<(u16,u16)>,command_text: &Option<String>, f: &mut Frame<B>, area: Rect)
     where
         B: Backend,
     {
         let block = Block::default().style(Style::default().fg(Color::Black).bg(Color::White));
-        let paragraph = Paragraph::new(
-            window
-                .clone()
-                .and_then(|w| w.command_text.clone())
-                .unwrap_or("".to_string()),
-        )
+        let paragraph = Paragraph::new(command_text.clone().unwrap_or_default())
         .block(block.clone())
         .alignment(Alignment::Left)
         .wrap(Wrap { trim: true });
-        let paragraph2 = Paragraph::new(format!("{:?}", Mode::Normal))
+        let paragraph2 = Paragraph::new(format!("{:?}",mode))
             .block(block.clone())
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true });
         let paragraph3 = Paragraph::new(format!(
             "{},{}",
-            window.clone().map(|w| w.y_pos).unwrap_or_default(),
-            window.map(|w| w.x_pos).unwrap_or_default()
+            coords.unwrap_or_default().0,
+            coords.unwrap_or_default().1
         ))
         .block(block)
         .alignment(Alignment::Right)
@@ -166,13 +172,13 @@ impl Ui {
         f.render_widget(paragraph3, area);
     }
 
-    fn draw_header<B>(window: Option<Window>, f: &mut Frame<B>, area: Rect)
+    fn draw_header<B>(title: &Option<String>, f: &mut Frame<B>, area: Rect)
     where
         B: Backend,
     {
         let block = Block::default().style(Style::default().fg(Color::Black).bg(Color::White));
         let paragraph =
-            Paragraph::new(window.and_then(|w| w.title.clone()).unwrap_or_default()).block(block);
+            Paragraph::new(title.clone().unwrap_or_default()).block(block);
         f.render_widget(paragraph, area);
     }
 

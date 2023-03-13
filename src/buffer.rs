@@ -211,7 +211,7 @@ impl Buffer {
     }
 
     pub fn add_newline_below(&mut self) {
-        self.set_insert_mode();
+        //self.set_insert_mode();
         let char_idx = self.end_of_current_line();
         self.past_states.push(self.text.clone());
         self.future_states = vec![];
@@ -264,28 +264,6 @@ impl Buffer {
             .text
             .try_remove(self.start_of_current_line()..self.end_of_current_line());
         self.recenter();
-    }
-
-    pub fn set_command_mode(&mut self) {
-        self.mode = Mode::Command
-    }
-
-    pub fn set_insert_mode(&mut self) {
-        self.mode = Mode::Insert
-    }
-
-    pub fn set_visual_mode(&mut self) {
-        self.mode = Mode::Visual;
-        let idx = self.get_cursor_idx();
-        self.start_select_pos = Some(idx);
-    }
-
-    pub fn set_append_mode(&mut self) {
-        self.mode = Mode::Append
-    }
-
-    pub fn set_normal_mode(&mut self) {
-        self.mode = Mode::Normal
     }
 
     pub fn insert_return(&mut self) {
