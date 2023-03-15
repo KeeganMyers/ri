@@ -13,7 +13,7 @@ use crossterm::{
     execute, terminal,
     terminal::{enable_raw_mode, ClearType},
 };
-use id_tree::{InsertBehavior::*, Node, Tree};
+use id_tree::{RemoveBehavior::*,InsertBehavior::*, Node, Tree,NodeId};
 use log::trace;
 use std::collections::HashMap;
 use std::io::stdout;
@@ -41,7 +41,7 @@ pub struct App {
     pub buffers: HashMap<Uuid, Buffer>,
     pub ui: Ui,
     pub windows: HashMap<Uuid, Window>,
-    pub window_layout: Tree<Rect>,
+    pub window_layout: Tree<(Rect,Uuid)>,
     pub current_window_id: Uuid,
     pub current_buffer_id: Uuid,
     pub should_quit: bool,
@@ -52,6 +52,12 @@ pub struct App {
 impl App {
     pub fn get_mut_buffer(&mut self) -> Option<&mut Buffer> {
         self.buffers.get_mut(&self.current_buffer_id)
+    }
+
+    pub fn reorder_windows(&mut self) {
+        for (idx,window) in self.windows.values_mut().enumerate() {
+            window.order = idx
+        }
     }
 
 
@@ -119,11 +125,10 @@ impl App {
         execute!(stdout, EnableMouseCapture)?;
         let backend = CrosstermBackend::new(stdout);
         let mut terminal = Terminal::new(backend)?;
-        let mut window_layout: Tree<Rect> = Tree::new();
+        let mut window_layout: Tree<(Rect,Uuid)> = Tree::new();
         let mut buffers = HashMap::new();
         let mut windows = HashMap::new();
         let ui = Ui::new(&mut terminal);
-        let root_node = window_layout.insert(Node::new(ui.text_area), AsRoot)?;
         let buffer = Buffer::new(file_name.clone())?;
         let mut window = Window::new(&WindowChange {
             id: buffer.id,
@@ -132,10 +137,10 @@ impl App {
             area: Some(ui.text_area.clone()),
             title: Some(buffer.title.clone()),
             page_size: buffer.page_size,
-            node_id: Some(root_node.clone()),
             current_page: buffer.current_page,
             ..WindowChange::default()
         });
+        let root_node = window_layout.insert(Node::new((ui.text_area,window.id)), AsRoot)?;
         let current_buffer_id = buffer.id.clone();
         let current_window_id = window.id.clone();
         window.set_highlight();
@@ -160,12 +165,10 @@ impl App {
 
     pub fn new_split(&mut self,file_name: Option<String>,direction: Direction) -> AnyHowResult<()> {
         if let Some(current_window) = self.get_window().clone() {
-            if let Some(node_id) = current_window.node_id.clone() {
+            if let Ok(Some(current_node_id)) = self.get_current_node_id() {
                 let buffer = Buffer::new(file_name.clone())?;
 
                 if let [split1,split2,..] = self.ui.split_ui(&current_window,direction)[..] {
-                let node_id_1 = self.window_layout.insert(Node::new(split1), UnderNode(&node_id))?;
-                let node_id_2 = self.window_layout.insert(Node::new(split2), UnderNode(&node_id))?;
                 let mut window = Window::new(&WindowChange {
                     id: buffer.id,
                     area: Some(split2),
@@ -173,10 +176,11 @@ impl App {
                     y_pos: buffer.y_pos,
                     title: Some(buffer.title.clone()),
                     page_size: buffer.page_size,
-                    node_id: Some(node_id_2.clone()),
                     current_page: buffer.current_page,
                     ..WindowChange::default()
                 });
+                let _ = self.window_layout.insert(Node::new((split1,current_window.id)), UnderNode(&current_node_id))?;
+                let _ = self.window_layout.insert(Node::new((split2,window.id)), UnderNode(&current_node_id))?;
                 let current_buffer_id = buffer.id.clone();
                 let current_window_id = window.id.clone();
                 window.set_highlight();
@@ -184,14 +188,15 @@ impl App {
                 self.current_file = buffer.file_path.clone();
                 self.buffers.insert(current_buffer_id, buffer);
                 self.windows.insert(current_window_id, window);
+                let _ = self.window_layout.get_mut(&current_node_id).map(|n| (n.data().0,Uuid::new_v4()));
                 self.get_mut_window().map(|w| {
-                    w.node_id = Some(node_id_1);
                     w.area = Some(split1);
                     w.x_offset = split1.x + 4;
                     w.y_offset = split1.y + 1;
                 });
                 self.current_buffer_id = current_buffer_id;
                 self.current_window_id = current_window_id;
+                self.reorder_windows();
              }
             }
         }
@@ -255,6 +260,64 @@ impl App {
                 self.render_ui();
             }
         }
+    }
+
+    pub fn get_current_node_id(&self) -> AnyHowResult<Option<NodeId>> {
+        let current_window_id = self.current_window_id;
+        if let Some(root_node_id) = self.window_layout.root_node_id() {
+            for (child,id) in self.window_layout.traverse_pre_order(root_node_id)?.zip(self.window_layout .traverse_pre_order_ids(root_node_id)?){
+                if child.data().1 == current_window_id {
+                    return Ok(Some(id));
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    pub fn get_parent_node(&self,current_node: NodeId) -> Option<((Rect,Uuid),NodeId)> {
+                    if let Ok(node) = self.window_layout.get(&current_node) {
+                        if let Some(parent_node_id) = node.parent() {
+                            if let Ok(parent_node) =  self.window_layout.get(parent_node_id) {
+                                return Some((parent_node.data().clone(),parent_node_id.clone()));
+                            }
+                        }
+                    }
+                    None
+    }
+
+    pub fn get_sibling_node(&self,parent_node_id: NodeId) -> AnyHowResult<Option<NodeId>> {
+            for (child,id) in self.window_layout.children(&parent_node_id)?.zip(self.window_layout.children_ids(&parent_node_id)?)  {
+                if child.data().1 != self.current_window_id {
+                    return Ok(Some(id.clone()));
+                }
+            }
+        Ok(None)
+    }
+
+    fn on_quit(&mut self) {
+        let id = self.current_buffer_id;
+        self.buffers.remove(&id);
+        if self.buffers.is_empty() {
+            self.should_quit = true;
+        } else {
+            if let Ok(Some(current_node)) = self.get_current_node_id() {
+                if let Some((_,parent_node_id)) = self.get_parent_node(current_node.clone()) {
+                    if let Ok(Some(sibling_node_id)) = self.get_sibling_node(parent_node_id.clone()) {
+                        if let Ok((_,sibling_window_id)) = self.window_layout.get(&sibling_node_id).map(|n| n.data().clone()) {
+                            let _ = self.window_layout.get_mut(&parent_node_id).map(|n| (n.data().0,sibling_window_id));
+                            let _ = self.window_layout.remove_node(current_node.clone(),LiftChildren);
+                            let _ = self.window_layout.remove_node(sibling_node_id.clone(),LiftChildren);
+                            self.windows.remove(&id);
+                            self.current_window_id = sibling_window_id;
+                            self.current_buffer_id = sibling_window_id;
+                            self.reorder_windows();
+                        }
+                    }
+                }
+            }
+        }
+        self.set_normal_mode();
+        self.render_ui();
     }
 
     pub fn handle_normal_token(&mut self, token: NormalToken) {
@@ -542,6 +605,15 @@ impl App {
 
                 self.render_ui();
             }
+            NormalToken::SetWindow(window_order) => {
+                log::debug!("in set window {:?}", window_order);
+                if let Some(window) = self.windows.values().filter(|w| w.order == window_order).nth(0) {
+                    self.current_window_id = window.id;
+                    self.current_buffer_id = window.id;
+                    self.current_file = self.get_buffer().map(|b| b.title.clone());
+                }
+                self.render_ui();
+            }
             _ => (),
         }
     }
@@ -602,16 +674,7 @@ impl App {
             }
             CommandToken::NoOp => (),
             CommandToken::Quit => {
-                let id = self.current_buffer_id;
-                self.buffers.remove(&id);
-                if let Some(buffer_id) = self.buffers.keys().nth(0) {
-                    self.current_buffer_id = *buffer_id;
-                }
-                if self.buffers.is_empty() {
-                    self.should_quit = true;
-                }
-                self.set_normal_mode();
-                self.render_ui();
+                self.on_quit()
             }
             CommandToken::TabNew => (),
             CommandToken::Enter => {

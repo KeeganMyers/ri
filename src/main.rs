@@ -78,10 +78,11 @@ fn main() -> Result<(), Box<dyn Error>> {
     let _ = setup_logger();
     let mut app = App::new(cli.file_name)?;
     app.handle_token(Token::Display(DisplayToken::DrawViewPort));
+    let mut parser = Parser::new();
     loop {
         if let Ok(true) = poll(Duration::from_millis(250)) {
             if let Ok(Event::Key(event)) = read() {
-                if let Ok(token) = Parser::handle_event(UserInput { event }, &app.mode) {
+                if let Ok(token) = parser.handle_event(UserInput { event }, &app.mode) {
                     app.handle_token(token); 
                     if app.should_quit {
                         break;

@@ -39,6 +39,7 @@ pub enum NormalToken {
     Esc,
     Enter,
     SwitchToCommand,
+    SetWindow(usize)
 }
 
 pub const PARSE_FAILURE_ERR: &'static str = "Unknown Token";
@@ -61,13 +62,9 @@ impl TryFrom<&String> for NormalToken {
             ['^', ..] => Ok(Self::FirstNonBlank),
             ['$', ..] => Ok(Self::Last),
             ['h', ..] => Ok(Self::Left),
-            ['z', 'h', ..] => Ok(Self::WindowLeft),
             ['l', ..] => Ok(Self::Right),
-            ['z', 'l', ..] => Ok(Self::WindowRight),
             ['k', ..] => Ok(Self::Up),
-            ['z', 'k', ..] => Ok(Self::WindowUp),
             ['j', ..] => Ok(Self::Down),
-            ['z', 'j', ..] => Ok(Self::WindowDown),
             ['g', '_', ..] => Ok(Self::LastNonBlank),
             ['g', 'g', ..] => Ok(Self::LastLine),
             ['G', ..] => Ok(Self::FirstLine),
@@ -78,6 +75,7 @@ impl TryFrom<&String> for NormalToken {
             ['V', ..] => Ok(Self::VisualLine),
             ['\n', ..] => Ok(Self::Enter),
             ['f', rest @ ..] => Ok(Self::FindNext(rest.iter().collect::<String>())),
+            ['z', rest @ ..] if rest.iter().collect::<String>().trim().parse::<usize>().is_ok() => Ok(Self::SetWindow(rest.iter().collect::<String>().trim().parse::<usize>().unwrap_or_default())),
             ['F', rest @ ..] => Ok(Self::FindLast(rest.iter().collect::<String>())),
             ['t', rest @ ..] => Ok(Self::TillNext(rest.iter().collect::<String>())),
             ['T', rest @ ..] => Ok(Self::TillLast(rest.iter().collect::<String>())),

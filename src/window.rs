@@ -3,7 +3,6 @@ use crate::{
     token::{display_token::*},
 };
 use ropey::Rope;
-use id_tree::NodeId;
 use std::iter;
 use std::sync::Arc;
 use syntect::easy::HighlightLines;
@@ -60,12 +59,12 @@ impl<'a> From<&CachedSpan> for Span<'a> {
 #[derive(Default, Clone)]
 pub struct Window {
     pub id: Uuid,
+    pub order: usize,
     pub title: Option<String>,
     pub current_percent_size: u16,
     pub y_offset: u16,
     pub x_offset: u16,
     pub x_pos: u16,
-    pub node_id: Option<NodeId>,
     pub y_pos: u16,
     pub page_size: u16,
     pub current_page: u16,
@@ -278,7 +277,7 @@ impl Window {
     pub fn new(change: &WindowChange) -> Self {
         if let Some(area) = change.area {
             Self {
-                id: Uuid::new_v4(),
+                id: change.id,
                 x_pos: change.x_pos,
                 y_pos: change.y_pos,
                 title: change.title.clone(),
@@ -287,12 +286,11 @@ impl Window {
                 area: Some(area),
                 y_offset: area.y + 1,
                 x_offset: area.x + 4,
-                node_id: change.node_id.clone(),
                 ..Window::default()
             }
         } else {
             Self {
-                id: Uuid::new_v4(),
+                id: change.id,
                 x_pos: change.x_pos,
                 y_pos: change.y_pos,
                 title: change.title.clone(),
@@ -300,7 +298,6 @@ impl Window {
                 current_page: change.current_page,
                 y_offset: 1,
                 x_offset: 4,
-                node_id: change.node_id.clone(),
                 ..Window::default()
             }
         }
