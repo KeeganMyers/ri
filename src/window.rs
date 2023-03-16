@@ -17,7 +17,7 @@ use tui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Span, Spans, StyledGrapheme},
-    widgets::Widget,
+    widgets::{BorderType,Borders,Widget}
 };
 use uuid::Uuid;
 
@@ -81,10 +81,17 @@ pub struct Window {
 impl Widget for &Window {
     fn render(self, _area: Rect, buf: &mut TuiBuffer) {
         if let Some(area) = self.area {
+            self.render_border(&area,buf);
+            let main_area = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(1), Constraint::Percentage(99)].as_ref())
+                .split(area);
+            let header_area = main_area[0];
+            self.render_header(format!("{} {}",self.order,self.title.clone().unwrap_or_default()),&header_area,buf);
             let inner_text_splits = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Length(4), Constraint::Percentage(95)].as_ref())
-                .split(area);
+                .split(main_area[1]);
             let line_number_area = inner_text_splits[0];
             let text_area = inner_text_splits[1];
             let spans = self
@@ -119,6 +126,75 @@ impl Widget for &Window {
 }
 
 impl Window {
+    fn render_header(&self, title: String,area: &Rect,buf: &mut TuiBuffer)
+    {
+        let style = Style::default().fg(Color::Black).bg(Color::White);
+        let mut title_chars = title[..].chars();
+        for x in area.left()..area.right() {
+            if let Some(current_char) = title_chars.next() {
+                buf.get_mut(x, area.top())
+                    .set_symbol(&current_char.to_string())
+                    .set_style(style);
+            } else {
+                buf.get_mut(x, area.top())
+                    .set_symbol(" ")
+                    .set_style(style);
+            }
+        }
+    }
+
+    fn render_border(&self, area: &Rect,buf: &mut TuiBuffer) {
+        let style = Style::default();
+        buf.set_style(*area, style);
+        let symbols = BorderType::line_symbols(BorderType::Rounded);
+
+        // Sides
+        // left
+            for y in area.top()..area.bottom() {
+                buf.get_mut(area.left(), y)
+                    .set_symbol(symbols.vertical)
+                    .set_style(style);
+            }
+            //top
+            for x in area.left()..area.right() {
+                buf.get_mut(x, area.top())
+                    .set_symbol(symbols.horizontal)
+                    .set_style(style);
+            }
+            //right
+            let x = area.right() - 1;
+            for y in area.top()..area.bottom() {
+                buf.get_mut(x, y)
+                    .set_symbol(symbols.vertical)
+                    .set_style(style);
+            }
+            //bottom
+            let y = area.bottom() - 1;
+            for x in area.left()..area.right() {
+                buf.get_mut(x, y)
+                    .set_symbol(symbols.horizontal)
+                    .set_style(style);
+            }
+
+        // Corners
+        // bottom right
+            buf.get_mut(area.right() - 1, area.bottom() - 1)
+                .set_symbol(symbols.bottom_right)
+                .set_style(style);
+        //top right
+            buf.get_mut(area.right() - 1, area.top())
+                .set_symbol(symbols.top_right)
+                .set_style(style);
+        //left bottom
+            buf.get_mut(area.left(), area.bottom() - 1)
+                .set_symbol(symbols.bottom_left)
+                .set_style(style);
+        //top left
+            buf.get_mut(area.left(), area.top())
+                .set_symbol(symbols.top_left)
+                .set_style(style);
+    }
+
     pub fn cache_window_content(&mut self, text: &Rope) {
         self.cache_formatted_text(&text);
         self.cache_line_numbers(&text);
@@ -259,8 +335,8 @@ impl Window {
                     Self::get_line_offset(current_line_width, text_area.width, Alignment::Left);
                 for StyledGrapheme { symbol, style } in current_line {
                     buf.get_mut(
-                        text_area.left() + x,
-                        text_area.top() + y - self.current_page,
+                        text_area.left() + x + 1,
+                        text_area.top() + y  - self.current_page,
                     )
                     .set_symbol(if symbol.is_empty() { " " } else { symbol })
                     .set_style(*style);
@@ -268,7 +344,7 @@ impl Window {
                 }
             }
             y += 1;
-            if y >= text_area.height + self.current_page {
+            if y >= (text_area.height - 2 ) + self.current_page {
                 break;
             }
         }

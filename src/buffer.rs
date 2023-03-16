@@ -211,7 +211,6 @@ impl Buffer {
     }
 
     pub fn add_newline_below(&mut self) {
-        //self.set_insert_mode();
         let char_idx = self.end_of_current_line();
         self.past_states.push(self.text.clone());
         self.future_states = vec![];

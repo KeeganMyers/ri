@@ -140,7 +140,7 @@ impl App {
             current_page: buffer.current_page,
             ..WindowChange::default()
         });
-        let root_node = window_layout.insert(Node::new((ui.text_area,window.id)), AsRoot)?;
+        let _root_node = window_layout.insert(Node::new((ui.text_area,window.id)), AsRoot)?;
         let current_buffer_id = buffer.id.clone();
         let current_window_id = window.id.clone();
         window.set_highlight();
@@ -298,10 +298,11 @@ impl App {
         let id = self.current_buffer_id;
         self.buffers.remove(&id);
         if self.buffers.is_empty() {
+            let _ = execute!(stdout(), terminal::Clear(ClearType::All));
             self.should_quit = true;
         } else {
             if let Ok(Some(current_node)) = self.get_current_node_id() {
-                if let Some((_,parent_node_id)) = self.get_parent_node(current_node.clone()) {
+                if let Some(((parent_rect,_),parent_node_id)) = self.get_parent_node(current_node.clone()) {
                     if let Ok(Some(sibling_node_id)) = self.get_sibling_node(parent_node_id.clone()) {
                         if let Ok((_,sibling_window_id)) = self.window_layout.get(&sibling_node_id).map(|n| n.data().clone()) {
                             let _ = self.window_layout.get_mut(&parent_node_id).map(|n| (n.data().0,sibling_window_id));
@@ -310,6 +311,7 @@ impl App {
                             self.windows.remove(&id);
                             self.current_window_id = sibling_window_id;
                             self.current_buffer_id = sibling_window_id;
+                            self.get_mut_window().map(|w| w.area = Some(parent_rect));
                             self.reorder_windows();
                         }
                     }
