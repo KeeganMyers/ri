@@ -220,6 +220,19 @@ impl Buffer {
         self.x_pos = 0;
     }
 
+    pub fn move_to_line_number(&mut self, line_number: usize) {
+        let line_count = self.text.len_lines() as usize;
+        if line_number < line_count {
+            self.y_pos = (line_number - 1) as u16;
+            self.x_pos = 0;
+            if line_number >= self.page_size as usize { 
+                self.current_page = ((line_number - (line_number % self.page_size as usize)) - self.page_size as usize) as u16
+            } else {
+                self.current_page = 0
+            }
+        }
+    }
+
     pub fn select_line(&mut self) {
         self.mode = Mode::Visual;
         let idx = self.get_cursor_idx();

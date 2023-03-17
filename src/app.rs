@@ -675,6 +675,23 @@ impl App {
                 self.get_mut_buffer().and_then(|b| b.on_save().ok());
                 self.render_ui();
             }
+            CommandToken::GoToLine(line_number) => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.move_to_line_number(line_number);
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+                self.set_normal_mode();
+                self.render_ui();
+            }
             CommandToken::Split(file_name) => {
                 let _ = self.new_split(file_name,Direction::Vertical);
                 self.set_normal_mode();
