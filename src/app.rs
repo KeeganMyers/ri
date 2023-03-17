@@ -46,7 +46,6 @@ pub struct App {
     pub current_buffer_id: Uuid,
     pub should_quit: bool,
     pub mode: Mode,
-    pub current_file: Option<String>,
 }
 
 impl App {
@@ -83,7 +82,6 @@ impl App {
     pub fn render_ui(&mut self) {
         self.ui.draw_view_port(
             &self.current_window_id,
-            &self.current_file,
             &self.mode,
             self.get_buffer().map(|b| (b.x_pos,b.y_pos)),
             &self.command_text,
@@ -153,7 +151,6 @@ impl App {
             windows,
             buffers,
             ui,
-            current_file: file_name,
             window_layout,
             should_quit: false,
             current_buffer_id,
@@ -185,7 +182,6 @@ impl App {
                 let current_window_id = window.id.clone();
                 window.set_highlight();
                 window.cache_window_content(&buffer.text);
-                self.current_file = buffer.file_path.clone();
                 self.buffers.insert(current_buffer_id, buffer);
                 self.windows.insert(current_window_id, window);
                 let _ = self.window_layout.get_mut(&current_node_id).map(|n| (n.data().0,Uuid::new_v4()));
@@ -573,6 +569,40 @@ impl App {
 
                 self.render_ui();
             }
+            NormalToken::FirstLine => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.move_to_first_line();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            NormalToken::LastLine => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.move_to_last_line();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
             NormalToken::FirstNonBlank => {
                 if let Some(buffer) = self.get_mut_buffer() {
                     buffer.x_pos = 0 as u16;
@@ -612,7 +642,6 @@ impl App {
                 if let Some(window) = self.windows.values().filter(|w| w.order == window_order).nth(0) {
                     self.current_window_id = window.id;
                     self.current_buffer_id = window.id;
-                    self.current_file = self.get_buffer().map(|b| b.title.clone());
                 }
                 self.render_ui();
             }

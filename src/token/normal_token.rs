@@ -39,7 +39,8 @@ pub enum NormalToken {
     Esc,
     Enter,
     SwitchToCommand,
-    SetWindow(usize)
+    SetWindow(usize),
+    GoToLine(usize)
 }
 
 pub const PARSE_FAILURE_ERR: &'static str = "Unknown Token";
@@ -74,6 +75,7 @@ impl TryFrom<&String> for NormalToken {
             ['v', ..] => Ok(Self::Visual),
             ['V', ..] => Ok(Self::VisualLine),
             ['\n', ..] => Ok(Self::Enter),
+            [rest @ ..] if rest.iter().collect::<String>().trim().parse::<usize>().is_ok() => Ok(Self::GoToLine(rest.iter().collect::<String>().trim().parse::<usize>().unwrap_or_default())),
             ['f', rest @ ..] => Ok(Self::FindNext(rest.iter().collect::<String>())),
             ['z', rest @ ..] if rest.iter().collect::<String>().trim().parse::<usize>().is_ok() => Ok(Self::SetWindow(rest.iter().collect::<String>().trim().parse::<usize>().unwrap_or_default())),
             ['F', rest @ ..] => Ok(Self::FindLast(rest.iter().collect::<String>())),

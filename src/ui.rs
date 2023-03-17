@@ -24,7 +24,6 @@ impl Ui {
     pub fn draw_view_port(
         &mut self,
         current_window_id: &Uuid,
-        title: &Option<String>,
         mode: &Mode,
         coords: Option<(u16,u16)>,
         command_text: &Option<String>,
@@ -37,7 +36,6 @@ impl Ui {
         let _ = terminal.draw(|f| {
             Self::draw(
                 current_window_id,
-                title,
                 mode,
                 coords,
                 command_text,
@@ -66,7 +64,6 @@ impl Ui {
 
     pub fn draw<'a, B: 'a>(
         current_window_id: &Uuid,
-        title: &Option<String>,
         mode: &Mode,
         coords: Option<(u16,u16)>,
         command_text: &Option<String>,

@@ -57,7 +57,7 @@ impl Buffer {
     }
 
     pub fn on_down(&mut self) {
-        if self.y_pos < self.text.len_lines() as u16 - 1 {
+        if self.y_pos <= self.text.len_lines() as u16 - 1 {
             self.y_pos += 1;
         }
         if self.y_pos != 0 && (self.y_pos % self.page_size) == 0 {
@@ -201,6 +201,23 @@ impl Buffer {
 
     pub fn add_newline_above(&mut self) {
         unimplemented!()
+    }
+
+    pub fn move_to_last_line(&mut self) {
+        let line_count = self.text.len_lines() as u16;
+        self.x_pos = 0;
+        self.y_pos = line_count - 1;
+        if  line_count > self.page_size {
+            self.current_page = (line_count - self.page_size) - 1;
+        } else {
+            self.current_page = line_count;
+        }
+    }
+
+    pub fn move_to_first_line(&mut self) {
+        self.y_pos = 0;
+        self.current_page = 0;
+        self.x_pos = 0;
     }
 
     pub fn select_line(&mut self) {
