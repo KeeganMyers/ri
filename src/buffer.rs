@@ -202,6 +202,34 @@ impl Buffer {
     pub fn add_newline_above(&mut self) {
         unimplemented!()
     }
+    
+    pub fn yank_lines(&self,start_idx: usize,end_idx: usize) {
+        //account for the chance that the range is reversed
+        let mut str_vec = vec![];
+        let line_count = self.text.len_lines() as usize;
+        if start_idx < 1 || end_idx < 1 {
+            return ();
+        }
+
+        if end_idx > line_count || start_idx > line_count  {
+            return ();
+        }
+
+        if end_idx < start_idx {
+            for line in end_idx-1..start_idx {
+                str_vec.push(self.text.line(line).to_string())
+            }
+        } else {
+            for line in start_idx-1..end_idx {
+                str_vec.push(self.text.line(line).to_string())
+            }
+        }
+
+        if let Ok(mut clipboard) = self.clipboard.lock() {
+            clipboard.set_text(str_vec.join(""))
+            .expect("Could not set value to system clipboard");
+        }
+    }
 
     pub fn move_to_last_line(&mut self) {
         let line_count = self.text.len_lines() as u16;
@@ -262,17 +290,6 @@ impl Buffer {
             self.text = future_state;
         }
     }
-
-    /*
-    pub fn yank_range(&mut self, range_start: usize, range_end: usize) {
-        if let Some(slice) = self.text.get_slice(range_start..range_end) {
-            if let Ok(mut clipboard) = self.clipboard.lock() {
-                clipboard.set_text(slice.as_str().unwrap_or_default().to_owned())
-                .expect("Could not set value to system clipboard");
-            }
-        }
-    }
-    */
 
     pub fn paste_text(&mut self) {
         if let Ok(mut clipboard) = self.clipboard.lock() {

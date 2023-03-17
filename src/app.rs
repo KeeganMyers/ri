@@ -692,6 +692,12 @@ impl App {
                 self.set_normal_mode();
                 self.render_ui();
             }
+            CommandToken::YankLines(start_idx,end_idx) => {
+                log::debug!("in yank lines");
+                self.get_buffer().map(|b| b.yank_lines(start_idx,end_idx));
+                self.set_normal_mode();
+                self.render_ui();
+            }
             CommandToken::Split(file_name) => {
                 let _ = self.new_split(file_name,Direction::Vertical);
                 self.set_normal_mode();

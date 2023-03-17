@@ -19,7 +19,9 @@ pub enum CommandToken {
     Esc,
     Enter,
     SetBuffer(Uuid),
-    GoToLine(usize)
+    GoToLine(usize),
+    YankLines(usize,usize),
+    DeleteLines(usize,usize)
 }
 
 pub const PARSE_FAILURE_ERR: &'static str = "Unknown Token";
@@ -34,10 +36,19 @@ impl TryFrom<&String> for CommandToken {
             [':', 'v', 's', rest @ ..] => Ok(Self::VerticalSplit(Some(rest.iter().collect::<String>()))),
             [':', 's', 'p', rest @ ..] => Ok(Self::Split(Some(rest.iter().collect::<String>()))),
             [':',rest @ ..] if rest.iter().collect::<String>().trim().parse::<usize>().is_ok() => Ok(Self::GoToLine(rest.iter().collect::<String>().trim().parse::<usize>().unwrap_or_default())),
-            [rest @ ..] => Ok(Self::Append(rest.iter().collect::<String>())),
+             _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),
         };
-        if command_token.is_err() &&value.starts_with(":") && value.contains(',') {
 
+        if command_token.is_err() && value.starts_with(":") && value.contains(',') && (value.ends_with("d") || value.ends_with("y")) {
+           let last_char = value.chars().nth(value.len() -1).unwrap();
+           let command_vec = value.trim_start_matches(":").trim_end_matches("d").trim_end_matches("y").split(',').collect::<Vec<&str>>();
+           return match  &command_vec[..] {
+               [start_index,end_index] if last_char == 'y' && start_index.parse::<usize>().is_ok() && end_index.parse::<usize>().is_ok()  => return Ok(Self::YankLines(start_index.parse::<usize>().unwrap(),end_index.parse::<usize>().unwrap())),
+               [start_index,end_index] if last_char == 'd' && start_index.parse::<usize>().is_ok() && end_index.parse::<usize>().is_ok()  => return Ok(Self::DeleteLines(start_index.parse::<usize>().unwrap(),end_index.parse::<usize>().unwrap())),
+             _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),
+           };
+        } else if command_token.is_err() {
+            return Ok(Self::Append(value.clone()));
         }
         command_token
     }
