@@ -312,6 +312,18 @@ impl Buffer {
         self.recenter();
     }
 
+    pub fn set_states(&mut self) {
+        self.future_states = vec![];
+        self.past_states.push(self.text.clone());
+    }
+
+    pub fn delete_line_direct(&mut self) {
+        let _ = self
+            .text
+            .try_remove(self.start_of_current_line()..self.end_of_current_line());
+        self.recenter();
+    }
+
     pub fn insert_return(&mut self) {
         let char_idx = self.get_cursor_idx();
         self.past_states.push(self.text.clone());

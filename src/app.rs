@@ -693,10 +693,41 @@ impl App {
                 self.render_ui();
             }
             CommandToken::YankLines(start_idx,end_idx) => {
-                log::debug!("in yank lines");
                 self.get_buffer().map(|b| b.yank_lines(start_idx,end_idx));
                 self.set_normal_mode();
                 self.render_ui();
+            }
+            CommandToken::DeleteLines(start_idx,end_idx) => {
+                let mut start = start_idx;
+                let mut end = end_idx;
+                if start_idx > end_idx {
+                    start = end_idx;
+                    end = start_idx;
+                }
+                if let (Some(window), Some(buffer)) = self.get_mut_pair() {
+                buffer.set_states();
+                for idx in start..end {
+                    buffer.move_to_line_number(idx);
+                    buffer.delete_line_direct();
+                    let _ = window.remove_cache_line(idx -1 as usize);
+                }
+
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    window.cache_line_numbers(&buffer.text);
+                    window.update(change);
+
+                    self.render_ui();
+                    self.set_normal_mode();
+                    self.render_ui();
+                }
             }
             CommandToken::Split(file_name) => {
                 let _ = self.new_split(file_name,Direction::Vertical);
