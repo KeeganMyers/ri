@@ -10,11 +10,13 @@ use crate::{
     app::{App, Mode},
     buffer::Buffer,
     parser::{Parser, UserInput},
-    token::{CommandToken, Token},
+    token::{
+        display_token::{DisplayToken},
+        Token,
+    },
     ui::Ui,
     window::Window,
 };
-use actix::prelude::*;
 use crossterm;
 use crossterm::event::{poll, read, Event};
 use std::time::Duration;
@@ -63,7 +65,7 @@ fn setup_logger() -> AnyhowResult<()> {
             Root::builder()
                 .appender("logfile")
                 .appender("stderr")
-                .build(LevelFilter::Trace),
+                .build(LevelFilter::Debug),
         )
         .unwrap();
 
@@ -71,32 +73,24 @@ fn setup_logger() -> AnyhowResult<()> {
     Ok(())
 }
 
-#[async_std::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+fn main() -> Result<(), Box<dyn Error>> {
     let cli: Cli = argh::from_env();
     let _ = setup_logger();
-    let system = System::new();
-    let execution = async {
-        let parser = Parser { mode: Mode::Normal }.start();
-        let app = App::new(cli.file_name,parser.clone()).unwrap().start();
-        let _ = app.send(Token::Command(CommandToken::NoOp)).await;
-        loop {
-            if let Ok(_) = poll(Duration::from_millis(500)) {
-                let input = read();
-                if let Ok(Event::Key(event)) = input {
-                    if let Ok(Ok(token)) = parser.send(UserInput { event }).await {
-                        if  app.send(token).await.is_err() {
-                            System::current().stop();
-                            break;
-                        }
+    let mut app = App::new(cli.file_name)?;
+    app.handle_token(Token::Display(DisplayToken::DrawViewPort));
+    let mut parser = Parser::new();
+    loop {
+        if let Ok(true) = poll(Duration::from_millis(250)) {
+            if let Ok(Event::Key(event)) = read() {
+                if let Ok(token) = parser.handle_event(UserInput { event }, &app.mode) {
+                    app.handle_token(token); 
+                    if app.should_quit {
+                        break;
                     }
-                    ()
                 }
+                ()
             }
         }
-    };
-    let arbiter = Arbiter::new();
-    arbiter.spawn(execution);
-    let _ = system.run();
+    }
     Ok(())
 }

@@ -1,12 +1,10 @@
 use crate::{
-    app::Mode,
     reflow::{LineComposer, WordWrapper},
-    token::{display_token::*, GetState, Token},
+    token::{display_token::*},
 };
-use actix::prelude::*;
 use ropey::Rope;
 use std::iter;
-use std::sync::{Arc};
+use std::sync::Arc;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::Style as SyntectStyle;
 use syntect::util::LinesWithEndings;
@@ -19,7 +17,7 @@ use tui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Span, Spans, StyledGrapheme},
-    widgets::Widget,
+    widgets::{BorderType,Borders,Widget}
 };
 use uuid::Uuid;
 
@@ -58,28 +56,20 @@ impl<'a> From<&CachedSpan> for Span<'a> {
     }
 }
 
-#[derive(Default, Clone, MessageResponse)]
+#[derive(Default, Clone)]
 pub struct Window {
     pub id: Uuid,
+    pub order: usize,
     pub title: Option<String>,
     pub current_percent_size: u16,
-    pub buffer_id: Uuid,
     pub y_offset: u16,
     pub x_offset: u16,
     pub x_pos: u16,
     pub y_pos: u16,
-    pub mode: Mode,
     pub page_size: u16,
     pub current_page: u16,
-    pub outer_areas: Vec<Option<Rect>>,
     pub area: Option<Rect>,
     pub command_text: Option<String>,
-    pub bottom: Option<u16>,
-    pub right: Option<u16>,
-    pub window_left: Option<Uuid>,
-    pub window_right: Option<Uuid>,
-    pub window_up: Option<Uuid>,
-    pub window_down: Option<Uuid>,
     pub highlight_cache: Vec<Vec<CachedSpan>>,
     pub line_num_cache: Vec<Vec<CachedSpan>>,
     pub syntax_set: Option<SyntaxSet>,
@@ -88,13 +78,20 @@ pub struct Window {
     pub syntax: Option<SyntaxReference>,
 }
 
-impl Widget for Window {
+impl Widget for &Window {
     fn render(self, _area: Rect, buf: &mut TuiBuffer) {
         if let Some(area) = self.area {
+            self.render_border(&area,buf);
+            let main_area = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([Constraint::Length(1), Constraint::Percentage(99)].as_ref())
+                .split(area);
+            let header_area = main_area[0];
+            self.render_header(format!("{} {}",self.order,self.title.clone().unwrap_or_default()),&header_area,buf);
             let inner_text_splits = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints([Constraint::Length(4), Constraint::Percentage(95)].as_ref())
-                .split(area);
+                .split(main_area[1]);
             let line_number_area = inner_text_splits[0];
             let text_area = inner_text_splits[1];
             let spans = self
@@ -129,6 +126,93 @@ impl Widget for Window {
 }
 
 impl Window {
+    fn render_header(&self, title: String,area: &Rect,buf: &mut TuiBuffer)
+    {
+        let style = Style::default().fg(Color::Black).bg(Color::White);
+        let mut title_chars = title[..].chars();
+        for x in area.left()..area.right() {
+            if let Some(current_char) = title_chars.next() {
+                buf.get_mut(x, area.top())
+                    .set_symbol(&current_char.to_string())
+                    .set_style(style);
+            } else {
+                buf.get_mut(x, area.top())
+                    .set_symbol(" ")
+                    .set_style(style);
+            }
+        }
+    }
+
+    fn render_border(&self, area: &Rect,buf: &mut TuiBuffer) {
+        let style = Style::default();
+        buf.set_style(*area, style);
+        let symbols = BorderType::line_symbols(BorderType::Rounded);
+
+        // Sides
+        // left
+            for y in area.top()..area.bottom() {
+                buf.get_mut(area.left(), y)
+                    .set_symbol(symbols.vertical)
+                    .set_style(style);
+            }
+            //top
+            for x in area.left()..area.right() {
+                buf.get_mut(x, area.top())
+                    .set_symbol(symbols.horizontal)
+                    .set_style(style);
+            }
+            //right
+            let x = area.right() - 1;
+            for y in area.top()..area.bottom() {
+                buf.get_mut(x, y)
+                    .set_symbol(symbols.vertical)
+                    .set_style(style);
+            }
+            //bottom
+            let y = area.bottom() - 1;
+            for x in area.left()..area.right() {
+                buf.get_mut(x, y)
+                    .set_symbol(symbols.horizontal)
+                    .set_style(style);
+            }
+
+        // Corners
+        // bottom right
+            buf.get_mut(area.right() - 1, area.bottom() - 1)
+                .set_symbol(symbols.bottom_right)
+                .set_style(style);
+        //top right
+            buf.get_mut(area.right() - 1, area.top())
+                .set_symbol(symbols.top_right)
+                .set_style(style);
+        //left bottom
+            buf.get_mut(area.left(), area.bottom() - 1)
+                .set_symbol(symbols.bottom_left)
+                .set_style(style);
+        //top left
+            buf.get_mut(area.left(), area.top())
+                .set_symbol(symbols.top_left)
+                .set_style(style);
+    }
+
+    pub fn cache_window_content(&mut self, text: &Rope) {
+        self.cache_formatted_text(&text);
+        self.cache_line_numbers(&text);
+    }
+
+    pub fn set_highlight(&mut self) {
+        let ps = SyntaxSet::load_defaults_newlines();
+        let ts = ThemeSet::load_defaults();
+        let syntax = ps.find_syntax_by_extension("rs").clone();
+        let theme = ts.themes["base16-ocean.dark"].clone();
+        self.syntax_set = Some(ps.clone());
+        self.theme_set = Some(Arc::new(ts));
+        if let Some(s) = syntax {
+            self.syntax = Some(s.clone());
+        }
+        self.theme = Some(theme);
+    }
+
     fn convert_style(style: SyntectStyle) -> Style {
         Style::default().fg(Color::Rgb(
             style.foreground.r,
@@ -151,7 +235,7 @@ impl Window {
             .collect::<Vec<CachedSpan>>()
     }
 
-    fn cache_formatted_text(&mut self, text: &Rope) {
+    pub fn cache_formatted_text(&mut self, text: &Rope) {
         if let (Some(syntax), Some(theme)) = (&self.syntax, &self.theme) {
             let mut highlight = HighlightLines::new(syntax, theme);
             let mut spans: Vec<Vec<CachedSpan>> = vec![];
@@ -166,13 +250,13 @@ impl Window {
         }
     }
 
-    fn cache_line_numbers(&mut self, text: &Rope) {
+    pub fn cache_line_numbers(&mut self, text: &Rope) {
         let line_count = text.len_lines();
         let local_line_nums = Self::line_numbers(line_count);
         self.line_num_cache = local_line_nums.clone();
     }
 
-    fn cache_new_line(&mut self, text: &Rope, line_index: usize) {
+    pub fn cache_new_line(&mut self, text: &Rope, line_index: usize) {
         if let (Some(syntax), Some(theme)) = (&self.syntax, &self.theme) {
             let mut highlight = HighlightLines::new(syntax, theme);
             let rope_str = text
@@ -189,11 +273,11 @@ impl Window {
         }
     }
 
-    async fn remove_cache_line(&mut self, line_index: usize) {
+    pub fn remove_cache_line(&mut self, line_index: usize) {
         let _ = self.highlight_cache.remove(line_index);
     }
 
-    async fn cache_current_line(&mut self, text: &Rope, line_index: usize) {
+    pub fn cache_current_line(&mut self, text: &Rope, line_index: usize) {
         if let (Some(syntax), Some(theme)) = (&self.syntax, &self.theme) {
             let mut highlight = HighlightLines::new(syntax, theme);
             let rope_str = text
@@ -251,8 +335,8 @@ impl Window {
                     Self::get_line_offset(current_line_width, text_area.width, Alignment::Left);
                 for StyledGrapheme { symbol, style } in current_line {
                     buf.get_mut(
-                        text_area.left() + x,
-                        text_area.top() + y - self.current_page,
+                        text_area.left() + x + 1,
+                        text_area.top() + y  - self.current_page,
                     )
                     .set_symbol(if symbol.is_empty() { " " } else { symbol })
                     .set_style(*style);
@@ -260,25 +344,38 @@ impl Window {
                 }
             }
             y += 1;
-            if y >= text_area.height + self.current_page {
+            if y >= (text_area.height - 2 ) + self.current_page {
                 break;
             }
         }
     }
 
     pub fn new(change: &WindowChange) -> Self {
-        Self {
-            id: Uuid::new_v4(),
-            buffer_id: change.id,
-            x_pos: change.x_pos,
-            y_pos: change.y_pos,
-            mode: change.mode.clone(),
-            title: change.title.clone(),
-            page_size: change.page_size,
-            current_page: change.current_page,
-            y_offset: 0,
-            x_offset: 4,
-            ..Window::default()
+        if let Some(area) = change.area {
+            Self {
+                id: change.id,
+                x_pos: change.x_pos,
+                y_pos: change.y_pos,
+                title: change.title.clone(),
+                page_size: change.page_size,
+                current_page: change.current_page,
+                area: Some(area),
+                y_offset: area.y + 1,
+                x_offset: area.x + 4,
+                ..Window::default()
+            }
+        } else {
+            Self {
+                id: change.id,
+                x_pos: change.x_pos,
+                y_pos: change.y_pos,
+                title: change.title.clone(),
+                page_size: change.page_size,
+                current_page: change.current_page,
+                y_offset: 1,
+                x_offset: 4,
+                ..Window::default()
+            }
         }
     }
     pub fn cursor_x_pos(&self) -> u16 {
@@ -313,78 +410,11 @@ impl Window {
         None
     }
 
-    fn handle_display_token(&mut self, token: DisplayToken) {
-        match token {
-            DisplayToken::UpdateWindow(change) => {
-                self.x_pos = change.x_pos;
-                self.y_pos = change.y_pos;
-                self.mode = change.mode;
-                self.title = change.title;
-                self.page_size = change.page_size;
-                self.current_page = change.current_page;
-                self.y_offset = 0;
-                self.x_offset = 4;
-            }
-            DisplayToken::CloseWindow(_) => {
-                unimplemented!();
-            }
-            DisplayToken::AppendCommand(_) => {
-                unimplemented!();
-            }
-            DisplayToken::CacheCurrentLine(text, line_index) => {
-                let _ = self.cache_current_line(&text, line_index);
-            }
-            DisplayToken::CacheWindowContent(text) => {
-                self.cache_formatted_text(&text);
-                self.cache_line_numbers(&text);
-            }
-            DisplayToken::CacheNewLine(text, line_index) => {
-                self.cache_new_line(&text, line_index);
-                self.cache_line_numbers(&text);
-            }
-            DisplayToken::RemoveCacheLine(text, line_index) => {
-                let _ = self.remove_cache_line(line_index);
-                self.cache_line_numbers(&text);
-            }
-            DisplayToken::SetHighlight => {
-                let ps = SyntaxSet::load_defaults_newlines();
-                let ts = ThemeSet::load_defaults();
-                let syntax = ps.find_syntax_by_extension("rs").clone();
-                let theme = ts.themes["base16-ocean.dark"].clone();
-                self.syntax_set = Some(ps.clone());
-                self.theme_set = Some(Arc::new(ts));
-                if let Some(s) = syntax {
-                    self.syntax = Some(s.clone());
-                }
-                self.theme = Some(theme);
-            }
-            _ => (),
-        };
-        ()
-    }
-}
-
-impl Actor for Window {
-    type Context = Context<Self>;
-}
-
-impl Handler<Token> for Window {
-    type Result = ();
-
-    fn handle(&mut self, msg: Token, _ctx: &mut Context<Self>) -> Self::Result {
-        match msg {
-            Token::Display(t) => {
-                self.handle_display_token(t);
-            }
-            _ => (),
-        }
-    }
-}
-
-impl Handler<GetState> for Window {
-    type Result = Window;
-
-    fn handle(&mut self, _msg: GetState, _ctx: &mut Context<Self>) -> Self::Result {
-        self.clone()
+    pub fn update(&mut self, change: WindowChange) {
+        self.x_pos = change.x_pos;
+        self.y_pos = change.y_pos;
+        self.title = change.title;
+        self.page_size = change.page_size;
+        self.current_page = change.current_page;
     }
 }

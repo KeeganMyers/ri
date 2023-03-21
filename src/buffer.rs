@@ -1,21 +1,13 @@
 use crate::app::Mode;
 use crate::token::{
-    command_token::*,
-    display_token::{DisplayToken, WindowChange},
-    NormalToken, OperatorToken,
+    OperatorToken,
 };
-use crate::token::{get_token_from_str, AppendToken, InsertToken, Token};
-use actix::prelude::*;
 use std::sync::{Arc, Mutex};
 
 use arboard::Clipboard;
 use log::trace;
 use ropey::Rope;
 use uuid::Uuid;
-
-impl Actor for Buffer {
-    type Context = Context<Self>;
-}
 
 #[derive(Clone)]
 pub struct Buffer {
@@ -35,8 +27,6 @@ pub struct Buffer {
     pub title: String,
     pub page_size: u16,
     pub current_page: u16,
-    pub window: Option<Recipient<Token>>,
-    pub app: Recipient<Token>,
 }
 
 impl Buffer {
@@ -67,7 +57,7 @@ impl Buffer {
     }
 
     pub fn on_down(&mut self) {
-        if self.y_pos < self.text.len_lines() as u16 - 1 {
+        if self.y_pos <= self.text.len_lines() as u16 - 1 {
             self.y_pos += 1;
         }
         if self.y_pos != 0 && (self.y_pos % self.page_size) == 0 {
@@ -212,6 +202,64 @@ impl Buffer {
     pub fn add_newline_above(&mut self) {
         unimplemented!()
     }
+    
+    pub fn yank_lines(&self,start_idx: usize,end_idx: usize) {
+        //account for the chance that the range is reversed
+        let mut str_vec = vec![];
+        let line_count = self.text.len_lines() as usize;
+        if start_idx < 1 || end_idx < 1 {
+            return ();
+        }
+
+        if end_idx > line_count || start_idx > line_count  {
+            return ();
+        }
+
+        if end_idx < start_idx {
+            for line in end_idx-1..start_idx {
+                str_vec.push(self.text.line(line).to_string())
+            }
+        } else {
+            for line in start_idx-1..end_idx {
+                str_vec.push(self.text.line(line).to_string())
+            }
+        }
+
+        if let Ok(mut clipboard) = self.clipboard.lock() {
+            clipboard.set_text(str_vec.join(""))
+            .expect("Could not set value to system clipboard");
+        }
+    }
+
+    pub fn move_to_last_line(&mut self) {
+        let line_count = self.text.len_lines() as u16;
+        self.x_pos = 0;
+        self.y_pos = line_count - 1;
+        if  line_count > self.page_size {
+            self.current_page = (line_count - self.page_size) - 1;
+        } else {
+            self.current_page = line_count;
+        }
+    }
+
+    pub fn move_to_first_line(&mut self) {
+        self.y_pos = 0;
+        self.current_page = 0;
+        self.x_pos = 0;
+    }
+
+    pub fn move_to_line_number(&mut self, line_number: usize) {
+        let line_count = self.text.len_lines() as usize;
+        if line_number < line_count {
+            self.y_pos = (line_number - 1) as u16;
+            self.x_pos = 0;
+            if line_number >= self.page_size as usize { 
+                self.current_page = ((line_number - (line_number % self.page_size as usize)) - self.page_size as usize) as u16
+            } else {
+                self.current_page = 0
+            }
+        }
+    }
 
     pub fn select_line(&mut self) {
         self.mode = Mode::Visual;
@@ -221,7 +269,6 @@ impl Buffer {
     }
 
     pub fn add_newline_below(&mut self) {
-        self.set_insert_mode();
         let char_idx = self.end_of_current_line();
         self.past_states.push(self.text.clone());
         self.future_states = vec![];
@@ -244,17 +291,6 @@ impl Buffer {
         }
     }
 
-    /*
-    pub fn yank_range(&mut self, range_start: usize, range_end: usize) {
-        if let Some(slice) = self.text.get_slice(range_start..range_end) {
-            if let Ok(mut clipboard) = self.clipboard.lock() {
-                clipboard.set_text(slice.as_str().unwrap_or_default().to_owned())
-                .expect("Could not set value to system clipboard");
-            }
-        }
-    }
-    */
-
     pub fn paste_text(&mut self) {
         if let Ok(mut clipboard) = self.clipboard.lock() {
             let coppied_text = clipboard
@@ -276,33 +312,63 @@ impl Buffer {
         self.recenter();
     }
 
-    pub fn set_command_mode(&mut self) {
-        self.mode = Mode::Command
+    pub fn set_states(&mut self) {
+        self.future_states = vec![];
+        self.past_states.push(self.text.clone());
     }
 
-    pub fn set_insert_mode(&mut self) {
-        self.mode = Mode::Insert
+    pub fn delete_line_direct(&mut self) {
+        let _ = self
+            .text
+            .try_remove(self.start_of_current_line()..self.end_of_current_line());
+        self.recenter();
     }
 
-    pub fn set_visual_mode(&mut self) {
-        self.mode = Mode::Visual;
-        let idx = self.get_cursor_idx();
-        self.start_select_pos = Some(idx);
+    pub fn insert_return(&mut self) {
+        let char_idx = self.get_cursor_idx();
+        self.past_states.push(self.text.clone());
+        self.future_states = vec![];
+        let _ = self.text.try_insert_char(char_idx, '\n');
+        self.x_pos = 0;
+        self.on_down();
+    }
+    pub fn insert_chars(&mut self, chars: &str) {
+        self.past_states.push(self.text.clone());
+        self.future_states = vec![];
+        let char_idx = self.get_cursor_idx();
+        if self.text.try_insert(char_idx, &chars).is_ok() {
+            self.x_pos += chars.len() as u16;
+        }
+    }
+    pub fn append_return(&mut self) {
+        let char_idx = self.get_cursor_idx() + 1;
+        self.past_states.push(self.text.clone());
+        self.future_states = vec![];
+        if self.text.try_insert_char(char_idx, '\n').is_ok() {
+            self.y_pos += 1;
+            self.x_pos = 0;
+        } else if self.text.try_insert_char(char_idx - 1, '\n').is_ok() {
+            self.y_pos += 1;
+            self.x_pos = 0;
+        }
     }
 
-    pub fn set_append_mode(&mut self) {
-        self.mode = Mode::Append
+    pub fn append_chars(&mut self, chars: &str) {
+        self.past_states.push(self.text.clone());
+        self.future_states = vec![];
+        let char_idx = self.get_cursor_idx() + 1;
+        if self.text.try_insert(char_idx, &chars).is_ok() {
+            self.x_pos += chars.len() as u16;
+        } else if self.text.try_insert(char_idx - 1, &chars).is_ok() {
+            self.x_pos += chars.len() as u16;
+        }
     }
 
-    pub fn set_normal_mode(&mut self) {
-        self.mode = Mode::Normal
-    }
-
-    pub fn new(app: Recipient<Token>, file_name: Option<String>) -> Result<Self, std::io::Error> {
+    pub fn new(file_name: Option<String>) -> Result<Self, std::io::Error> {
         match file_name {
             Some(file_path) => {
-                let rope = if std::path::Path::new(&file_path).exists() {
-                    let file = std::fs::File::open(&file_path)?;
+                let rope = if std::path::Path::new(&file_path.trim()).exists() {
+                    let file = std::fs::File::open(&file_path.trim())?;
                     let buf_reader = std::io::BufReader::new(file);
                     Rope::from_reader(buf_reader)?
                 } else {
@@ -320,14 +386,12 @@ impl Buffer {
                     future_states: vec![],
                     x_pos: 0,
                     y_pos: 0,
-                    file_path: Some(file_path),
+                    file_path: Some(file_path.trim().to_owned()),
                     text: rope,
                     command_text: None,
                     operator: None::<OperatorToken>,
                     current_page: 0,
                     page_size: 10,
-                    app,
-                    window: None,
                 })
             }
             None => Ok(Self {
@@ -347,342 +411,7 @@ impl Buffer {
                 operator: None,
                 current_page: 0,
                 page_size: 10,
-                app,
-                window: None,
             }),
-        }
-    }
-
-    pub fn handle_append_token(&mut self, token: AppendToken) {
-        match token {
-            AppendToken::Enter => {
-                let char_idx = self.get_cursor_idx() + 1;
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                if self.text.try_insert_char(char_idx, '\n').is_ok() {
-                    self.y_pos += 1;
-                    self.x_pos = 0;
-                } else if self.text.try_insert_char(char_idx - 1, '\n').is_ok() {
-                    self.y_pos += 1;
-                    self.x_pos = 0;
-                }
-            }
-            AppendToken::Append(chars) => {
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                let char_idx = self.get_cursor_idx() + 1;
-                if self.text.try_insert(char_idx, &chars).is_ok() {
-                    self.x_pos += chars.len() as u16;
-                } else if self.text.try_insert(char_idx - 1, &chars).is_ok() {
-                    self.x_pos += chars.len() as u16;
-                }
-            }
-            AppendToken::Remove => {
-                self.remove_char();
-            }
-            AppendToken::Esc => {
-                self.start_select_pos = None;
-                self.set_normal_mode();
-            }
-        }
-    }
-
-    pub fn handle_command_token(&mut self, token: CommandToken) {
-        match token {
-            CommandToken::SetBufferWindow(window_addr) => {
-                self.window = Some(window_addr);
-            }
-            CommandToken::Quit => {
-                self.set_normal_mode();
-                let _ = self
-                    .app
-                    .try_send(Token::Command(CommandToken::Quit));
-            }
-            CommandToken::Write => {
-                let _ = self.on_save();
-                if let Some(window) = &self.window {
-                    let _ = window.try_send(Token::Display(DisplayToken::CloseWindow(self.id)));
-                    let _ = self
-                        .app
-                        .try_send(Token::Display(DisplayToken::DrawViewPort(self.id, vec![])));
-                }
-            }
-            CommandToken::Split(_) => {
-                self.set_normal_mode();
-            }
-            CommandToken::VerticalSplit(_) => {
-                self.set_normal_mode();
-            }
-            CommandToken::Esc => {
-                self.set_normal_mode();
-                let _ = self
-                    .app
-                    .try_send(Token::Display(DisplayToken::DrawViewPort(self.id, vec![])));
-            }
-            CommandToken::Append(chars) => {
-                log::debug!("in append command");
-                self.command_text = self.command_text.clone().map(|mut t| {
-                    t.push_str(&chars);
-                    t
-                });
-                if let Some(window) = &self.window {
-                    /*
-                    let _ = window.try_send(Token::Display(DisplayToken::AppendCommand(
-                        self.command_text.clone(),
-                    )));
-                    let _ = self
-                        .app
-                        .try_send(Token::Display(DisplayToken::DrawViewPort(self.id, vec![])));
-                    */
-                }
-            }
-            CommandToken::Remove => {
-                self.command_text = self.command_text.clone().map(|mut t| {
-                    t.truncate(t.len() - 1);
-                    t
-                });
-                if let Some(window) = &self.window {
-                    let _ = window.try_send(Token::Display(DisplayToken::AppendCommand(
-                        self.command_text.clone(),
-                    )));
-                    let _ = self
-                        .app
-                        .try_send(Token::Display(DisplayToken::DrawViewPort(self.id, vec![])));
-                }
-            }
-            CommandToken::Enter => {
-                log::debug!("in buffer enter {:?}",self.command_text);
-                if let Some(command_text) = &self.command_text {
-                    if let Ok(Token::Command(command)) =
-                        get_token_from_str(&Mode::Command, &format!(":{}", command_text))
-                    {
-                        return self.handle_command_token(command);
-                    }
-                }
-                let _ = self
-                    .app
-                    .try_send(Token::Display(DisplayToken::DrawViewPort(self.id, vec![])));
-            }
-            _ => (),
-        }
-    }
-
-    fn standard_insert_response(&self) {
-        if let Some(window) = &self.window {
-            let _ = window.try_send(Token::Display(DisplayToken::CacheCurrentLine(
-                self.text.clone(),
-                self.y_pos as usize,
-            )));
-            let _ = window.try_send(Token::Display(DisplayToken::UpdateWindow(WindowChange {
-                id: self.id,
-                x_pos: self.x_pos,
-                y_pos: self.y_pos,
-                mode: self.mode.clone(),
-                title: Some(self.title.clone()),
-                page_size: self.page_size,
-                current_page: self.current_page,
-                ..WindowChange::default()
-            })));
-        }
-        let _ = self
-            .app
-            .try_send(Token::Display(DisplayToken::DrawViewPort(self.id, vec![])));
-    }
-
-    pub fn handle_insert_token(&mut self, token: InsertToken) {
-        match token {
-            InsertToken::Enter => {
-                let char_idx = self.get_cursor_idx();
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                let _ = self.text.try_insert_char(char_idx, '\n');
-                self.x_pos = 0;
-                self.on_down();
-
-                if let Some(window) = &self.window {
-                    let _ = window.try_send(Token::Display(DisplayToken::CacheNewLine(
-                        self.text.clone(),
-                        self.y_pos as usize,
-                    )));
-                    let _ =
-                        window.try_send(Token::Display(DisplayToken::UpdateWindow(WindowChange {
-                            id: self.id,
-                            x_pos: self.x_pos,
-                            y_pos: self.y_pos,
-                            mode: self.mode.clone(),
-                            title: Some(self.title.clone()),
-                            page_size: self.page_size,
-                            current_page: self.current_page,
-                            ..WindowChange::default()
-                        })));
-                }
-                let _ = self
-                    .app
-                    .try_send(Token::Display(DisplayToken::DrawViewPort(self.id, vec![])));
-            }
-            InsertToken::Append(chars) => {
-                self.past_states.push(self.text.clone());
-                self.future_states = vec![];
-                let char_idx = self.get_cursor_idx();
-                if self.text.try_insert(char_idx, &chars).is_ok() {
-                    self.x_pos += chars.len() as u16;
-                }
-                self.standard_insert_response();
-            }
-            InsertToken::Remove => {
-                self.remove_char();
-                self.standard_insert_response();
-            }
-            InsertToken::Esc => {
-                self.start_select_pos = None;
-                self.set_normal_mode();
-                self.standard_normal_response()
-            }
-        }
-    }
-
-    fn standard_normal_response(&self) {
-        if let Some(window) = &self.window {
-            let _ = window.try_send(Token::Display(DisplayToken::UpdateWindow(WindowChange {
-                id: self.id,
-                x_pos: self.x_pos,
-                y_pos: self.y_pos,
-                mode: self.mode.clone(),
-                title: Some(self.title.clone()),
-                page_size: self.page_size,
-                current_page: self.current_page,
-                ..WindowChange::default()
-            })));
-        }
-        let _ = self
-            .app
-            .try_send(Token::Display(DisplayToken::DrawViewPort(self.id, vec![])));
-    }
-
-    pub fn handle_normal_token(&mut self, token: NormalToken) {
-        match token {
-            NormalToken::Up => {
-                self.on_up();
-                self.standard_normal_response()
-            }
-            NormalToken::Down => {
-                self.on_down();
-                self.standard_normal_response()
-            }
-            NormalToken::Left => {
-                self.on_left();
-                self.standard_normal_response()
-            }
-            NormalToken::Right => {
-                self.on_right();
-                self.standard_normal_response()
-            }
-            NormalToken::SwitchToCommand => {
-                log::debug!("switching to append");
-                self.command_text = Some("".to_string());
-                self.set_command_mode();
-                let _ = self
-                    .app
-                    .try_send(Token::Command(CommandToken::SetMode(Mode::Command)));
-                self.standard_normal_response()
-            }
-            NormalToken::SwitchToInsert => {
-                self.set_insert_mode();
-                self.standard_normal_response()
-            }
-            NormalToken::SwitchToAppend => {
-                self.set_append_mode();
-                self.standard_normal_response()
-            }
-            NormalToken::AddNewLineBelow => {
-                self.add_newline_below();
-                if let Some(window) = &self.window {
-                    let _ = window.try_send(Token::Display(DisplayToken::CacheNewLine(
-                        self.text.clone(),
-                        self.y_pos as usize,
-                    )));
-                    let _ =
-                        window.try_send(Token::Display(DisplayToken::UpdateWindow(WindowChange {
-                            id: self.id,
-                            x_pos: self.x_pos,
-                            y_pos: self.y_pos,
-                            mode: self.mode.clone(),
-                            title: Some(self.title.clone()),
-                            page_size: self.page_size,
-                            current_page: self.current_page,
-                            ..WindowChange::default()
-                        })));
-                }
-                let _ = self
-                    .app
-                    .try_send(Token::Display(DisplayToken::DrawViewPort(self.id, vec![])));
-            }
-            NormalToken::AddNewLineAbove => {
-                self.add_newline_above();
-                self.standard_normal_response()
-            }
-            NormalToken::Paste => {
-                self.paste_text();
-                self.standard_normal_response()
-            }
-            NormalToken::Undo => {
-                self.undo();
-                self.standard_normal_response()
-            }
-            NormalToken::Redo => {
-                self.redo();
-                self.standard_normal_response()
-            }
-            NormalToken::DeleteLine => {
-                let removed_line_index = self.y_pos;
-                self.delete_line();
-                if let Some(window) = &self.window {
-                    let _ = window.try_send(Token::Display(DisplayToken::RemoveCacheLine(
-                        self.text.clone(),
-                        removed_line_index as usize,
-                    )));
-                    let _ =
-                        window.try_send(Token::Display(DisplayToken::UpdateWindow(WindowChange {
-                            id: self.id,
-                            x_pos: self.x_pos,
-                            y_pos: self.y_pos,
-                            mode: self.mode.clone(),
-                            title: Some(self.title.clone()),
-                            page_size: self.page_size,
-                            current_page: self.current_page,
-                            ..WindowChange::default()
-                        })));
-                }
-            }
-            NormalToken::Visual => {
-                self.set_visual_mode();
-                self.standard_normal_response()
-            }
-            NormalToken::VisualLine => {
-                self.select_line();
-                self.standard_normal_response()
-            }
-            NormalToken::Last => {
-                self.x_pos = (self.current_line_len() - 2) as u16;
-                self.standard_normal_response()
-            }
-            NormalToken::LastNonBlank => {
-                self.x_pos = (self.current_line_len() - 2) as u16;
-                self.standard_normal_response()
-            }
-            NormalToken::First => {
-                self.x_pos = 0 as u16;
-                self.standard_normal_response()
-            }
-            NormalToken::FirstNonBlank => {
-                self.x_pos = 0 as u16;
-                self.standard_normal_response()
-            }
-            NormalToken::StartWord => {
-                self.x_pos = self.find_next_word();
-                self.standard_normal_response()
-            }
-            _ => (),
         }
     }
 
@@ -767,22 +496,4 @@ impl Buffer {
         Ok(vec![])
     }
         */
-}
-
-impl Handler<Token> for Buffer {
-    type Result = ();
-    fn handle(&mut self, msg: Token, _ctx: &mut Context<Self>) {
-        match msg {
-            Token::Append(t) => self.handle_append_token(t),
-            Token::Command(t) => self.handle_command_token(t),
-            Token::Insert(t) => self.handle_insert_token(t),
-            Token::Normal(t) => self.handle_normal_token(t),
-            //Token::Operator(t) => self.handle_operator_token(t),
-            //Token::Range(t) => {
-            //   let _ = self.handle_range_token(t);
-            //  Ok(vec![])
-            //}
-            _ => (),
-        }
-    }
 }

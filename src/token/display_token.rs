@@ -1,22 +1,20 @@
-use crate::app::Mode;
-use crate::window::Window;
 use anyhow::Error as AnyHowError;
 use crossterm::event::KeyEvent as Key;
 use ropey::Rope;
 use std::{convert::TryFrom, iter::Iterator};
 use tui::layout::Direction;
 use uuid::Uuid;
+use tui::layout::Rect;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct WindowChange {
     pub id: Uuid,
     pub x_pos: u16,
     pub y_pos: u16,
-    pub command_text: Option<String>,
-    pub mode: Mode,
     pub title: Option<String>,
     pub page_size: u16,
     pub current_page: u16,
+    pub area: Option<Rect>
 }
 
 #[derive(Clone)]
@@ -24,7 +22,7 @@ pub enum DisplayToken {
     SetHighlight,
     UpdateWindow(WindowChange),
     NewWindow(WindowChange, Option<Direction>),
-    DrawViewPort(Uuid, Vec<Window>),
+    DrawViewPort,
     DrawWindow,
     SetTextLayout(Direction),
     CacheWindowContent(Rope),
