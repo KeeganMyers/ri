@@ -20,7 +20,6 @@ unicode-width = "0.1"
 async-std = {version = "1.12.0",features = ["attributes"]}
 #ra_ap_rust-analyzer = "0.0.141"
 crossterm = "0.26.0"
-compressed_string = "1.0.0"
 id_tree = "1.8.0"
 
 #![feature(alloc_system)]

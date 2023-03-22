@@ -17,11 +17,10 @@ use tui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::{Span, Spans, StyledGrapheme},
-    widgets::{BorderType,Borders,Widget}
+    widgets::{BorderType,Widget}
 };
 use uuid::Uuid;
 
-use compressed_string::ComprString;
 use std::ops::Deref;
 use unicode_width::UnicodeWidthStr;
 
@@ -33,7 +32,7 @@ pub struct WindowPosition {
 
 #[derive(Clone)]
 pub struct CachedSpan {
-    pub content: ComprString,
+    pub content: String,
     pub style: Style,
 }
 
@@ -41,7 +40,7 @@ impl CachedSpan {
     #[allow(dead_code)]
     fn raw(content: &str) -> Self {
         CachedSpan {
-            content: ComprString::from(content),
+            content: content.to_owned(),
             style: Style::default(),
         }
     }
@@ -223,7 +222,7 @@ impl Window {
 
     fn to_cached_span(style: SyntectStyle, value: &str) -> CachedSpan {
         CachedSpan {
-            content: ComprString::new(value),
+            content: value.to_owned(),
             style: Self::convert_style(style),
         }
     }
@@ -296,7 +295,7 @@ impl Window {
     fn line_numbers(line_number_count: usize) -> Vec<Vec<CachedSpan>> {
         vec![(1..line_number_count)
             .map(|l| CachedSpan {
-                content: ComprString::new(&format!("{:<5}", l)),
+                content: format!("{l:<5}"),
                 style: Style::default().fg(Color::Yellow),
             })
             .collect::<Vec<CachedSpan>>()]
