@@ -1,4 +1,4 @@
-use crate::{Mode};
+use crate::Mode;
 use crate::Window;
 use std::io::Stdout;
 
@@ -25,7 +25,7 @@ impl Ui {
         &mut self,
         current_window_id: &Uuid,
         mode: &Mode,
-        coords: Option<(u16,u16)>,
+        coords: Option<(u16, u16)>,
         command_text: &Option<String>,
         window_widgets: Vec<&Window>,
         terminal: &mut Term,
@@ -47,25 +47,22 @@ impl Ui {
         });
     }
 
-    pub fn split_ui(&self, window: &Window,direction: Direction) -> Vec<Rect> {
-        let text_area = if let Some(area) = window.area
-        {
+    pub fn split_ui(&self, window: &Window, direction: Direction) -> Vec<Rect> {
+        let text_area = if let Some(area) = window.area {
             area
         } else {
             self.text_area
         };
         Layout::default()
             .direction(direction)
-            .constraints(
-                vec![Constraint::Percentage(50),Constraint::Percentage(50)]
-            )
+            .constraints(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
             .split(text_area)
     }
 
     pub fn draw<'a, B: 'a>(
         current_window_id: &Uuid,
         mode: &Mode,
-        coords: Option<(u16,u16)>,
+        coords: Option<(u16, u16)>,
         command_text: &Option<String>,
         foot_area: Rect,
         text_area: Rect,
@@ -82,32 +79,31 @@ impl Ui {
             f.render_widget(window, text_area);
         }
 
-        Self::draw_footer(mode,coords, command_text,f, foot_area);
+        Self::draw_footer(mode, coords, command_text, f, foot_area);
     }
 
     fn create_layout<B: Backend>(frame: &Frame<B>) -> (Rect, Rect) {
         let area = Layout::default()
-            .constraints(
-                [
-                    Constraint::Min(20),
-                    Constraint::Length(1),
-                ]
-                .as_ref(),
-            )
+            .constraints([Constraint::Min(20), Constraint::Length(1)].as_ref())
             .split(frame.size());
         (area[0], area[1])
     }
 
-    fn draw_footer<B>(mode: &Mode, coords: Option<(u16,u16)>,command_text: &Option<String>, f: &mut Frame<B>, area: Rect)
-    where
+    fn draw_footer<B>(
+        mode: &Mode,
+        coords: Option<(u16, u16)>,
+        command_text: &Option<String>,
+        f: &mut Frame<B>,
+        area: Rect,
+    ) where
         B: Backend,
     {
         let block = Block::default().style(Style::default().fg(Color::Black).bg(Color::White));
         let paragraph = Paragraph::new(command_text.clone().unwrap_or_default())
-        .block(block.clone())
-        .alignment(Alignment::Left)
-        .wrap(Wrap { trim: true });
-        let paragraph2 = Paragraph::new(format!("{:?}",mode))
+            .block(block.clone())
+            .alignment(Alignment::Left)
+            .wrap(Wrap { trim: true });
+        let paragraph2 = Paragraph::new(format!("{:?}", mode))
             .block(block.clone())
             .alignment(Alignment::Center)
             .wrap(Wrap { trim: true });
@@ -123,7 +119,6 @@ impl Ui {
         f.render_widget(paragraph2, area);
         f.render_widget(paragraph3, area);
     }
-
 
     pub fn new(terminal: &mut Term) -> Self {
         let (text_area, foot_area) = Ui::create_layout(&terminal.get_frame());

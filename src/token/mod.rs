@@ -18,7 +18,7 @@ pub use normal_token::*;
 pub use operator_token::*;
 pub use range_token::*;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Token {
     Append(AppendToken),
     Command(CommandToken),
@@ -32,22 +32,57 @@ pub enum Token {
 #[derive(Clone, Debug)]
 pub struct GetState {}
 
-pub fn get_token_from_str(mode: &Mode, input: &String) -> AnyHowResult<Token> {
-    match mode {
-        Mode::Normal => {
-            if let Ok(normal) = NormalToken::try_from(input) {
-                Ok(Token::Normal(normal))
-            } else if let Ok(operator) = OperatorToken::try_from(input) {
-                Ok(Token::Operator(operator))
-            } else if let Ok(range) = RangeToken::try_from(input) {
-                Ok(Token::Range(range))
-            } else {
-                Err(AnyHowError::msg("No Tokens Found".to_string()))
+pub fn get_tokens_from_chars(mode: &Mode, input: &Vec<char>) -> Vec<Token> {
+    let mut skip_to = 0;
+    let mut tokens = vec![];
+    for idx in 0..input.len() {
+        let unmatched = &input[skip_to..=idx];
+        let token_result = match mode {
+            Mode::Normal => {
+                if let Ok(normal) = NormalToken::try_from(unmatched) {
+                    Some(Token::Normal(normal))
+                } else if let Ok(operator) = OperatorToken::try_from(unmatched) {
+                    Some(Token::Operator(operator))
+                } else if let Ok(range) = RangeToken::try_from(unmatched) {
+                    Some(Token::Range(range))
+                } else {
+                    None
+                }
             }
+            Mode::Command => {
+                if let Ok(token) = CommandToken::try_from(unmatched) {
+                    Some(Token::Command(token))
+                } else {
+                    None
+                }
+            }
+            Mode::Insert => {
+                if let Ok(token) = InsertToken::try_from(unmatched) {
+                    Some(Token::Insert(token))
+                } else {
+                    None
+                }
+            }
+            Mode::Append => {
+                if let Ok(token) = AppendToken::try_from(unmatched) {
+                    Some(Token::Append(token))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        };
+        if let Some(token) = token_result {
+            tokens.push(token);
+            skip_to = idx + 1;
         }
+    }
+    tokens
+}
+
+pub fn get_token_from_chars(mode: &Mode, input: &Vec<char>) -> AnyHowResult<Token> {
+    match mode {
         Mode::Command => Ok(Token::Command(CommandToken::try_from(input)?)),
-        Mode::Insert => Ok(Token::Insert(InsertToken::try_from(input)?)),
-        Mode::Append => Ok(Token::Append(AppendToken::try_from(input)?)),
         _ => Err(AnyHowError::msg("No Tokens Found".to_string())),
     }
 }

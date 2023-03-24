@@ -4,6 +4,14 @@ version = "0.1.0"
 authors = ["Keegan Myers"]
 edition = "2018"
 
+[[bin]]
+name = "ri"
+path = "src/bin/bin.rs"
+
+[lib]
+name = "ri"
+path = "src/lib.rs"
+
 [dependencies]
 ropey = "1.5.0"
 arboard = "3.2.0"

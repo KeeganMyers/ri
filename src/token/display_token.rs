@@ -3,10 +3,10 @@ use crossterm::event::KeyEvent as Key;
 use ropey::Rope;
 use std::{convert::TryFrom, iter::Iterator};
 use tui::layout::Direction;
-use uuid::Uuid;
 use tui::layout::Rect;
+use uuid::Uuid;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct WindowChange {
     pub id: Uuid,
     pub x_pos: u16,
@@ -14,10 +14,10 @@ pub struct WindowChange {
     pub title: Option<String>,
     pub page_size: u16,
     pub current_page: u16,
-    pub area: Option<Rect>
+    pub area: Option<Rect>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum DisplayToken {
     SetHighlight,
     UpdateWindow(WindowChange),

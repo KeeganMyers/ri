@@ -2,7 +2,7 @@ use anyhow::Error as AnyHowError;
 use crossterm::event::{KeyCode, KeyEvent as Key};
 use std::{convert::TryFrom, iter::Iterator};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum RangeToken {
     First,
     FirstNonBlank,
@@ -27,12 +27,11 @@ pub enum RangeToken {
     Enter,
 }
 
-pub const PARSE_FAILURE_ERR: &'static str = "Unknown Token";
-impl TryFrom<&String> for RangeToken {
+impl TryFrom<&[char]> for RangeToken {
     type Error = AnyHowError;
 
-    fn try_from(value: &String) -> Result<Self, Self::Error> {
-        match &*(value.chars().collect::<Vec<char>>()) {
+    fn try_from(value: &[char]) -> Result<Self, Self::Error> {
+        match value {
             ['^', ..] => Ok(Self::FirstNonBlank),
             ['$', ..] => Ok(Self::Last),
             ['h', ..] => Ok(Self::Left),
@@ -53,6 +52,15 @@ impl TryFrom<&String> for RangeToken {
             ['T', rest @ ..] => Ok(Self::TillLast(rest.iter().collect::<String>())),
             _ => Err(Self::Error::msg(PARSE_FAILURE_ERR)),
         }
+    }
+}
+
+pub const PARSE_FAILURE_ERR: &'static str = "Unknown Token";
+impl TryFrom<&Vec<char>> for RangeToken {
+    type Error = AnyHowError;
+
+    fn try_from(value: &Vec<char>) -> Result<Self, Self::Error> {
+        Self::try_from(&value[..])
     }
 }
 

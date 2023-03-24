@@ -1,7 +1,3 @@
-use crate::app::Mode;
-use crate::token::{
-    OperatorToken,
-};
 use std::sync::{Arc, Mutex};
 
 use arboard::Clipboard;
@@ -16,12 +12,10 @@ pub struct Buffer {
     pub future_states: Vec<Rope>,
     pub file_path: Option<String>,
     pub command_text: Option<String>,
-    pub operator: Option<OperatorToken>,
     pub x_pos: u16,
     pub y_pos: u16,
     pub start_select_pos: Option<usize>,
     pub end_select_pos: Option<usize>,
-    pub mode: Mode,
     pub clipboard: Arc<Mutex<Clipboard>>,
     pub text: Rope,
     pub title: String,
@@ -202,8 +196,8 @@ impl Buffer {
     pub fn add_newline_above(&mut self) {
         unimplemented!()
     }
-    
-    pub fn yank_lines(&self,start_idx: usize,end_idx: usize) {
+
+    pub fn yank_lines(&self, start_idx: usize, end_idx: usize) {
         //account for the chance that the range is reversed
         let mut str_vec = vec![];
         let line_count = self.text.len_lines() as usize;
@@ -211,23 +205,24 @@ impl Buffer {
             return ();
         }
 
-        if end_idx > line_count || start_idx > line_count  {
+        if end_idx > line_count || start_idx > line_count {
             return ();
         }
 
         if end_idx < start_idx {
-            for line in end_idx-1..start_idx {
+            for line in end_idx - 1..start_idx {
                 str_vec.push(self.text.line(line).to_string())
             }
         } else {
-            for line in start_idx-1..end_idx {
+            for line in start_idx - 1..end_idx {
                 str_vec.push(self.text.line(line).to_string())
             }
         }
 
         if let Ok(mut clipboard) = self.clipboard.lock() {
-            clipboard.set_text(str_vec.join(""))
-            .expect("Could not set value to system clipboard");
+            clipboard
+                .set_text(str_vec.join(""))
+                .expect("Could not set value to system clipboard");
         }
     }
 
@@ -235,7 +230,7 @@ impl Buffer {
         let line_count = self.text.len_lines() as u16;
         self.x_pos = 0;
         self.y_pos = line_count - 1;
-        if  line_count > self.page_size {
+        if line_count > self.page_size {
             self.current_page = (line_count - self.page_size) - 1;
         } else {
             self.current_page = line_count;
@@ -253,8 +248,9 @@ impl Buffer {
         if line_number < line_count {
             self.y_pos = (line_number - 1) as u16;
             self.x_pos = 0;
-            if line_number >= self.page_size as usize { 
-                self.current_page = ((line_number - (line_number % self.page_size as usize)) - self.page_size as usize) as u16
+            if line_number >= self.page_size as usize {
+                self.current_page = ((line_number - (line_number % self.page_size as usize))
+                    - self.page_size as usize) as u16
             } else {
                 self.current_page = 0
             }
@@ -262,7 +258,6 @@ impl Buffer {
     }
 
     pub fn select_line(&mut self) {
-        self.mode = Mode::Visual;
         let idx = self.get_cursor_idx();
         self.start_select_pos = Some(idx);
         self.end_select_pos = Some(self.end_of_current_line());
@@ -379,7 +374,6 @@ impl Buffer {
                     id: Uuid::new_v4(),
                     title: file_path.clone(),
                     clipboard: Arc::new(Mutex::new(Clipboard::new().unwrap())),
-                    mode: Mode::Normal,
                     start_select_pos: None,
                     end_select_pos: None,
                     past_states: vec![],
@@ -389,7 +383,6 @@ impl Buffer {
                     file_path: Some(file_path.trim().to_owned()),
                     text: rope,
                     command_text: None,
-                    operator: None::<OperatorToken>,
                     current_page: 0,
                     page_size: 10,
                 })
@@ -398,7 +391,6 @@ impl Buffer {
                 id: Uuid::new_v4(),
                 title: "Ri".to_string(),
                 clipboard: Arc::new(Mutex::new(Clipboard::new().unwrap())),
-                mode: Mode::Normal,
                 start_select_pos: None,
                 end_select_pos: None,
                 past_states: vec![],
@@ -408,7 +400,6 @@ impl Buffer {
                 file_path: None,
                 text: Rope::new(),
                 command_text: None,
-                operator: None,
                 current_page: 0,
                 page_size: 10,
             }),
