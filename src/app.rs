@@ -675,6 +675,40 @@ impl App {
 
                 self.render_ui();
             }
+            NormalToken::BackWord => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = buffer.find_last_word();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            NormalToken::EndWord => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = buffer.end_current_word();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
             NormalToken::SetWindow(window_order) => {
                 log::debug!("in set window {:?}", window_order);
                 if let Some(window) = self
