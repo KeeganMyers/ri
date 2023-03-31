@@ -50,6 +50,15 @@ impl Buffer {
         }
     }
 
+    pub fn on_up_range(&self) -> (usize,usize) {
+        let mut new_y_pos = self.y_pos;
+        if self.y_pos > 0 {
+            new_y_pos -= 1;
+        }
+        let line_length = self.text.line(self.y_pos as usize).len_chars();
+        (self.text.line_to_char(new_y_pos as usize),(self.text.line_to_char(self.y_pos as usize) + line_length))
+    }
+
     pub fn on_down(&mut self) {
         if self.y_pos <= self.text.len_lines() as u16 - 1 {
             self.y_pos += 1;
@@ -218,19 +227,16 @@ impl Buffer {
         }
     }
 
-    /*
-    pub fn find_range(&self, range: &RangeToken) -> Option<(u16, u16)> {
-        match range {
-            RangeToken::StartWord => Some((self.x_pos, self.find_next_word())),
-            _ => None,
-        }
-    }
-    */
-
     pub fn add_newline_above(&mut self) {
         unimplemented!()
     }
 
+    pub fn yank_line_range(&self, start_idx: usize, end_idx: usize) {
+        if let (Ok(mut clipboard),Some(rope_slice)) = (self.clipboard.lock(),self.text.get_slice(start_idx..end_idx as usize)) {
+        clipboard.set_text(rope_slice)
+                .expect("Could not set value to system clipboard");
+        }
+    }
     pub fn yank_lines(&self, start_idx: usize, end_idx: usize) {
         //account for the chance that the range is reversed
         let mut str_vec = vec![];
@@ -439,86 +445,4 @@ impl Buffer {
             }),
         }
     }
-
-    /*
-    pub fn handle_visual_token(&mut self, token: Token) -> AnyHowResult<Vec<Token>> {
-               match c {
-                   'y' => {
-                       self.mode = Mode::Normal;
-                       if let Some((start_idx, end_idx)) = self.get_selected_range() {
-                           if let Some(selected_text) = self.text.slice(start_idx..end_idx).as_str() {
-                               self.clipboard
-                                   .set_text(selected_text.to_owned())
-                                   .expect("Could not set value to system clipboard");
-                           }
-                       }
-                       self.start_select_pos = None;
-                       self.end_select_pos = None;
-                   }
-                   'p' => {
-                       self.mode = Mode::Normal;
-                       if let Some((start_idx, end_idx)) = self.get_selected_range() {
-                           let coppied_text = self
-                               .clipboard
-                               .get_text()
-                               .expect("Could not set value to system clipboard");
-                           self.past_states.push(self.text.clone());
-                           self.future_states = vec![];
-                           let _ = self.text.try_remove(start_idx..end_idx);
-                           let _ = self.text.try_insert(start_idx, &coppied_text);
-                       }
-                   }
-                   'd' => {
-                       self.mode = Mode::Normal;
-                       if let Some((start_idx, end_idx)) = self.get_selected_range() {
-                           self.future_states = vec![];
-                           self.past_states.push(self.text.clone());
-                           let _ = self.text.try_remove(start_idx..end_idx);
-                           self.recenter();
-                       }
-                       self.start_select_pos = None;
-                       self.end_select_pos = None;
-                   }
-                   _ => (),
-               }
-        Ok(vec![])
-    }
-        */
-
-    /*
-    pub fn handle_operator_token(&mut self, token: OperatorToken) -> AnyHowResult<Vec<Token>> {
-        if self.operator.is_none() {
-            self.operator = Some(token);
-            Ok(vec![])
-        } else {
-            Err(AnyHowError::msg("No Tokens Found".to_string()))
-        }
-
-        Err(AnyHowError::msg("No Tokens Found".to_string()))
-    }
-        */
-
-    /*
-    pub fn handle_range_token(&mut self, token: RangeToken) -> AnyHowResult<Vec<Token>> {
-           if let Some(range_command) = RangeToken::parse(RangeToken::tokenize(c.to_string()))
-               .unwrap_or_default()
-            mut    .get(0)
-           {
-               if let Some((start_range, end_range)) = self.find_range(range_command) {
-                   match operator {
-                       OperatorToken::Yank => {
-                           self.yank_range(start_range.into(), end_range.into())
-                       }
-                       _ => (),
-                   }
-               }
-           }
-           self.operator = None;
-
-                   if self.mode == self::Mode::Command {
-                       self.set_normal_mode();
-                   }
-        Ok(vec![])
-    }
-        */
 }

@@ -21,7 +21,9 @@ fn main() -> Result<(), Box<dyn Error>> {
         if let Ok(true) = poll(Duration::from_millis(250)) {
             if let Ok(Event::Key(event)) = read() {
                 let tokens = parser.handle_event(UserInput { event }, &app.mode);
-                app.handle_tokens(tokens);
+                if !tokens.is_empty() {
+                    app.handle_tokens(tokens);
+                }
                 if app.should_quit {
                     break;
                 }

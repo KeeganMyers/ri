@@ -4,28 +4,28 @@ pub mod display_token;
 pub mod insert_token;
 pub mod normal_token;
 pub mod operator_token;
-pub mod range_token;
+pub mod motion_token;
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use crossterm::event::KeyEvent as Key;
 use std::convert::TryFrom;
 
 use crate::Mode;
 pub use append_token::*;
+pub use motion_token::*;
 pub use command_token::*;
 pub use display_token::*;
 pub use insert_token::*;
 pub use normal_token::*;
 pub use operator_token::*;
-pub use range_token::*;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Token {
     Append(AppendToken),
+    Motion(MotionToken),
     Command(CommandToken),
     Insert(InsertToken),
     Normal(NormalToken),
     Operator(OperatorToken),
-    Range(RangeToken),
     Display(DisplayToken),
 }
 
@@ -43,8 +43,8 @@ pub fn get_tokens_from_chars(mode: &Mode, input: &Vec<char>) -> Vec<Token> {
                     Some(Token::Normal(normal))
                 } else if let Ok(operator) = OperatorToken::try_from(unmatched) {
                     Some(Token::Operator(operator))
-                } else if let Ok(range) = RangeToken::try_from(unmatched) {
-                    Some(Token::Range(range))
+                } else if let Ok(motion) = MotionToken::try_from(unmatched) {
+                    Some(Token::Motion(motion))
                 } else {
                     None
                 }
@@ -94,8 +94,8 @@ pub fn get_token_from_key(mode: &Mode, event: &Key) -> AnyHowResult<Token> {
                 Ok(Token::Normal(normal))
             } else if let Ok(operator) = OperatorToken::try_from(event) {
                 Ok(Token::Operator(operator))
-            } else if let Ok(range) = RangeToken::try_from(event) {
-                Ok(Token::Range(range))
+            } else if let Ok(motion) = MotionToken::try_from(event) {
+                Ok(Token::Motion(motion))
             } else {
                 Err(AnyHowError::msg("No Tokens Found".to_string()))
             }

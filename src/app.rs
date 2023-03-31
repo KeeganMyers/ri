@@ -2,7 +2,8 @@ use crate::{
     token::{
         display_token::{DisplayToken, WindowChange},
         get_token_from_chars, AppendToken, CommandToken, InsertToken, NormalToken, OperatorToken,
-        RangeToken, Token,
+        MotionToken,
+        Token,
     },
     ui::Term,
     Buffer, Ui, Window,
@@ -358,70 +359,6 @@ impl App {
 
     pub fn handle_normal_token(&mut self, token: NormalToken) {
         match token {
-            NormalToken::Up => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.on_up();
-                    let change = WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    };
-                    self.get_mut_window().map(|w| w.update(change));
-                }
-                self.render_ui();
-            }
-            NormalToken::Down => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.on_down();
-                    let change = WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    };
-                    self.get_mut_window().map(|w| w.update(change));
-                }
-                self.render_ui();
-            }
-            NormalToken::Left => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.on_left();
-                    let change = WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    };
-                    self.get_mut_window().map(|w| w.update(change));
-                }
-                self.render_ui();
-            }
-            NormalToken::Right => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.on_right();
-                    let change = WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    };
-                    self.get_mut_window().map(|w| w.update(change));
-                }
-                self.render_ui();
-            }
             NormalToken::SwitchToCommand => {
                 self.command_text = Some("".to_string());
                 self.set_command_mode();
@@ -542,159 +479,6 @@ impl App {
             NormalToken::VisualLine => {
                 if let Some(buffer) = self.get_mut_buffer() {
                     buffer.select_line();
-                    let change = WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    };
-                    self.get_mut_window().map(|w| w.update(change));
-                }
-
-                self.render_ui();
-            }
-            NormalToken::Last => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.x_pos = (buffer.current_line_len() - 2) as u16;
-                    let change = WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    };
-                    self.get_mut_window().map(|w| w.update(change));
-                }
-
-                self.render_ui();
-            }
-            NormalToken::LastNonBlank => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.x_pos = (buffer.current_line_len() - 2) as u16;
-                    let change = WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    };
-                    self.get_mut_window().map(|w| w.update(change));
-                }
-
-                self.render_ui();
-            }
-            NormalToken::First => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.x_pos = 0 as u16;
-                    let change = WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    };
-                    self.get_mut_window().map(|w| w.update(change));
-                }
-
-                self.render_ui();
-            }
-            NormalToken::FirstLine => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.move_to_first_line();
-                    let change = WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    };
-                    self.get_mut_window().map(|w| w.update(change));
-                }
-
-                self.render_ui();
-            }
-            NormalToken::LastLine => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.move_to_last_line();
-                    let change = WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    };
-                    self.get_mut_window().map(|w| w.update(change));
-                }
-
-                self.render_ui();
-            }
-            NormalToken::FirstNonBlank => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.x_pos = 0 as u16;
-                    let change = WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    };
-                    self.get_mut_window().map(|w| w.update(change));
-                }
-
-                self.render_ui();
-            }
-            NormalToken::StartWord => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.x_pos = buffer.find_next_word();
-                    let change = WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    };
-                    self.get_mut_window().map(|w| w.update(change));
-                }
-
-                self.render_ui();
-            }
-            NormalToken::BackWord => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.x_pos = buffer.find_last_word();
-                    let change = WindowChange {
-                        id: buffer.id,
-                        x_pos: buffer.x_pos,
-                        y_pos: buffer.y_pos,
-                        title: Some(buffer.title.clone()),
-                        page_size: buffer.page_size,
-                        current_page: buffer.current_page,
-                        ..WindowChange::default()
-                    };
-                    self.get_mut_window().map(|w| w.update(change));
-                }
-
-                self.render_ui();
-            }
-            NormalToken::EndWord => {
-                if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.x_pos = buffer.end_current_word();
                     let change = WindowChange {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
@@ -871,24 +655,278 @@ impl App {
         };
     }
 
-    pub fn handle_range_token(&mut self, token: RangeToken) {
-        unimplemented!()
-    }
-
     pub fn handle_operator_token(&mut self, token: OperatorToken) {
         unimplemented!()
     }
 
-    pub fn handle_tokens(&mut self, tokens: Vec<Token>) {
+    pub fn handle_operator_token_range(&mut self, token: OperatorToken, start_range: usize, end_range: usize) {
+        match token {
+            OperatorToken::Yank => {
+                self.get_buffer().map(|b| b.yank_line_range(start_range,end_range));
+            }
+            _ => ()
+        }
+    }
+
+    pub fn handle_motion_token_range(&mut self, token: MotionToken) -> Option<(usize,usize)> {
+        match token {
+            MotionToken::Up => self.get_buffer().map(|b| b.on_up_range()),
+            _ => None
+        }
+    }
+
+    pub fn handle_motion_token(&mut self, token: MotionToken) {
+        match token {
+            MotionToken::Up => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.on_up();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+                self.render_ui();
+            }
+            MotionToken::Down => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.on_down();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+                self.render_ui();
+            }
+            MotionToken::Left => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.on_left();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+                self.render_ui();
+            }
+            MotionToken::Right => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.on_right();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+                self.render_ui();
+            }
+            MotionToken::Last => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = (buffer.current_line_len() - 2) as u16;
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            MotionToken::LastNonBlank => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = (buffer.current_line_len() - 2) as u16;
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            MotionToken::First => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = 0 as u16;
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            MotionToken::FirstLine => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.move_to_first_line();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            MotionToken::LastLine => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.move_to_last_line();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            MotionToken::FirstNonBlank => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = 0 as u16;
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            MotionToken::StartWord => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = buffer.find_next_word();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            MotionToken::BackWord => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = buffer.find_last_word();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            MotionToken::EndWord => {
+                if let Some(buffer) = self.get_mut_buffer() {
+                    buffer.x_pos = buffer.end_current_word();
+                    let change = WindowChange {
+                        id: buffer.id,
+                        x_pos: buffer.x_pos,
+                        y_pos: buffer.y_pos,
+                        title: Some(buffer.title.clone()),
+                        page_size: buffer.page_size,
+                        current_page: buffer.current_page,
+                        ..WindowChange::default()
+                    };
+                    self.get_mut_window().map(|w| w.update(change));
+                }
+
+                self.render_ui();
+            }
+            _ => ()
+        }
+    }
+
+    pub fn handle_tokens(&mut self, parsed_tokens: Vec<Token>) {
+        let mut tokens = parsed_tokens.clone();
+        let operator_idx = tokens.iter().position(|t| {
+            if let Token::Operator(_) = *t {
+                true
+            } else {
+            false
+            }
+        });
+        let operator = if let Some(idx) = operator_idx {
+            Some(tokens.swap_remove(idx))
+        } else {
+            None
+        };
         for token in tokens {
             match token {
                 Token::Command(t) => self.handle_command_token(t),
                 Token::Append(t) => self.handle_append_token(t),
                 Token::Normal(t) => self.handle_normal_token(t),
                 Token::Insert(t) => self.handle_insert_token(t),
-                Token::Range(t) => self.handle_range_token(t),
                 Token::Operator(t) => self.handle_operator_token(t),
                 Token::Display(t) => self.handle_display_token(t),
+                Token::Motion(t) if operator_idx.is_some() =>  {
+                    if let (Some((start_range,end_range)),Some(Token::Operator(o))) = (self.handle_motion_token_range(t),&operator) {
+                        self.handle_operator_token_range(o.clone(),start_range,end_range);
+                    }
+                    ()
+                },
+                Token::Motion(t)  => self.handle_motion_token(t),
             }
         }
     }
