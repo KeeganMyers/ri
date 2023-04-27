@@ -68,6 +68,15 @@ impl Buffer {
         }
     }
 
+    pub fn on_down_range(&self) -> (usize,usize) {
+        let mut new_y_pos = self.y_pos;
+
+        if self.y_pos <= self.text.len_lines() as u16 - 1 {
+            new_y_pos += 1;
+        }
+        (self.text.line_to_char(new_y_pos as usize),(self.text.line_to_char(self.y_pos as usize)))
+    }
+
     pub fn current_line_len(&self) -> usize {
         let len = self
             .text
@@ -107,6 +116,16 @@ impl Buffer {
         }
     }
 
+    pub fn on_right_range(&self) -> (usize,usize) {
+        let mut new_x_pos = self.x_pos;
+        let chars = self.current_line_len();
+
+        if self.x_pos < chars as u16 - 1 {
+            new_x_pos += 1;
+        }
+        (self.text.line_to_char(new_x_pos as usize),(self.text.line_to_char(self.x_pos as usize)))
+    }
+
     pub fn on_left(&mut self) {
         if self.x_pos > 0 {
             self.x_pos -= 1;
@@ -114,6 +133,16 @@ impl Buffer {
                 self.on_up()
             }
         }
+    }
+
+    pub fn on_left_range(&self) -> (usize,usize) {
+        let mut new_x_pos = self.x_pos;
+        let chars = self.current_line_len();
+
+        if self.x_pos < chars as u16 - 1 {
+            new_x_pos -= 1;
+        }
+        (self.text.line_to_char(new_x_pos as usize),(self.text.line_to_char(self.x_pos as usize)))
     }
 
     pub fn recenter(&mut self) {
@@ -237,6 +266,7 @@ impl Buffer {
                 .expect("Could not set value to system clipboard");
         }
     }
+
     pub fn yank_lines(&self, start_idx: usize, end_idx: usize) {
         //account for the chance that the range is reversed
         let mut str_vec = vec![];
@@ -344,6 +374,16 @@ impl Buffer {
         let _ = self
             .text
             .try_remove(self.start_of_current_line()..self.end_of_current_line());
+        self.recenter();
+    }
+
+    pub fn delete_line_range(&mut self,start_idx: usize, end_idx: usize) {
+        self.future_states = vec![];
+        self.past_states.push(self.text.clone());
+
+        let _ = self
+            .text
+            .try_remove(start_idx..end_idx);
         self.recenter();
     }
 

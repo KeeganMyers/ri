@@ -655,7 +655,7 @@ impl App {
         };
     }
 
-    pub fn handle_operator_token(&mut self, token: OperatorToken) {
+    pub fn handle_operator_token(&mut self, _token: OperatorToken) {
         unimplemented!()
     }
 
@@ -663,7 +663,35 @@ impl App {
         match token {
             OperatorToken::Yank => {
                 self.get_buffer().map(|b| b.yank_line_range(start_range,end_range));
-            }
+            },
+            OperatorToken::Delete => {
+                self.get_mut_buffer().map(|b| b.delete_line_range(start_range,end_range));
+            },
+            OperatorToken::Change => {
+                unimplemented!()
+            },
+            OperatorToken::Indent => {
+                unimplemented!()
+            },
+            OperatorToken::UnIndent => {
+                unimplemented!()
+            },
+            OperatorToken::Uppercase => {
+                unimplemented!()
+            },
+            OperatorToken::Lowercase => {
+                unimplemented!()
+            },
+            OperatorToken::ToggleCase => {
+                unimplemented!()
+            },
+            OperatorToken::Esc => {
+                self.set_normal_mode();
+                self.get_mut_buffer().map(|b| b.start_select_pos = None);
+            },
+            OperatorToken::Remove => {
+                unimplemented!()
+            },
             _ => ()
         }
     }
@@ -671,6 +699,9 @@ impl App {
     pub fn handle_motion_token_range(&mut self, token: MotionToken) -> Option<(usize,usize)> {
         match token {
             MotionToken::Up => self.get_buffer().map(|b| b.on_up_range()),
+            MotionToken::Down => self.get_buffer().map(|b| b.on_down_range()),
+            MotionToken::Left => self.get_buffer().map(|b| b.on_left_range()),
+            MotionToken::Right => self.get_buffer().map(|b| b.on_right_range()),
             _ => None
         }
     }
