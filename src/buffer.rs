@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use arboard::Clipboard;
-use log::trace;
 use ropey::Rope;
 use uuid::Uuid;
+use crate::{add_safe,mut_add_safe,sub_safe,mut_sub_safe};
 
 #[derive(Clone)]
 pub struct Buffer {
@@ -43,60 +43,54 @@ impl Buffer {
 
     pub fn on_up(&mut self) {
         if self.y_pos > 0 {
-            self.y_pos -= 1;
+            mut_sub_safe(&mut self.y_pos,1);
         }
         if self.y_pos != 0 && (self.y_pos % self.page_size) == 0 {
-            self.current_page -= self.page_size;
+            mut_sub_safe(&mut self.current_page,self.page_size);
         }
     }
 
     pub fn on_up_range(&self) -> (usize,usize) {
         let mut new_y_pos = self.y_pos;
         if self.y_pos > 0 {
-            new_y_pos -= 1;
+            mut_sub_safe(&mut new_y_pos,1);
         }
         let line_length = self.text.line(self.y_pos as usize).len_chars();
         (self.text.line_to_char(new_y_pos as usize),(self.text.line_to_char(self.y_pos as usize) + line_length))
     }
 
     pub fn on_down(&mut self) {
-        if self.y_pos <= self.text.len_lines() as u16 - 1 {
-            self.y_pos += 1;
+        if self.y_pos <= sub_safe(self.text.len_lines() as u16,1) {
+            mut_add_safe(&mut self.y_pos,1);
         }
         if self.y_pos != 0 && (self.y_pos % self.page_size) == 0 {
-            self.current_page += self.page_size;
+            mut_add_safe(&mut self.current_page,self.page_size);
         }
     }
 
     pub fn on_down_range(&self) -> (usize,usize) {
         let mut new_y_pos = self.y_pos;
 
-        if self.y_pos <= self.text.len_lines() as u16 - 1 {
-            new_y_pos += 1;
+        if self.y_pos <= sub_safe(self.text.len_lines() as u16, 1) {
+            mut_add_safe(&mut new_y_pos,1);
         }
         (self.text.line_to_char(new_y_pos as usize),(self.text.line_to_char(self.y_pos as usize)))
     }
 
     pub fn current_line_len(&self) -> usize {
-        let len = self
+        self
             .text
             .get_line(self.y_pos as usize)
             .map(|l| l.len_chars())
-            .unwrap_or_default();
-        trace!("line_length {:?}", len);
-        len
+            .unwrap_or_default()
     }
 
     pub fn end_of_current_line(&self) -> usize {
-        let len = self.start_of_current_line() + self.current_line_len();
-        trace!("end of current line {:?}", len);
-        len
+        self.start_of_current_line() + self.current_line_len()
     }
 
     pub fn start_of_current_line(&self) -> usize {
-        let len = self.text.line_to_char(self.y_pos as usize);
-        trace!("start of current line {:?}", len);
-        len
+        self.text.line_to_char(self.y_pos as usize)
     }
 
     pub fn current_line_chars(&self) -> Vec<char> {
@@ -108,9 +102,9 @@ impl Buffer {
     }
 
     pub fn on_right(&mut self) {
-        let chars = self.current_line_len();
-        if self.x_pos < chars as u16 - 1 {
-            self.x_pos += 1;
+        let chars: u16 = self.current_line_len() as u16;
+        if self.x_pos < sub_safe(chars,1) {
+            mut_add_safe(&mut self.x_pos, 1);
         } else {
             self.on_down();
         }
@@ -118,29 +112,31 @@ impl Buffer {
 
     pub fn on_right_range(&self) -> (usize,usize) {
         let mut new_x_pos = self.x_pos;
-        let chars = self.current_line_len();
+        let chars: u16 = self.current_line_len() as u16;
 
-        if self.x_pos < chars as u16 - 1 {
-            new_x_pos += 1;
+        if self.x_pos < sub_safe(chars,1) {
+            mut_add_safe(&mut new_x_pos,1);
         }
         (self.text.line_to_char(new_x_pos as usize),(self.text.line_to_char(self.x_pos as usize)))
     }
 
     pub fn on_left(&mut self) {
         if self.x_pos > 0 {
-            self.x_pos -= 1;
+            mut_sub_safe(&mut self.x_pos,1);
             if self.x_pos == 0 {
                 self.on_up()
             }
+        } else {
+            self.on_up()
         }
     }
 
     pub fn on_left_range(&self) -> (usize,usize) {
         let mut new_x_pos = self.x_pos;
-        let chars = self.current_line_len();
+        let chars: u16 = self.current_line_len() as u16;
 
-        if self.x_pos < chars as u16 - 1 {
-            new_x_pos -= 1;
+        if self.x_pos < sub_safe(chars,1) {
+            mut_sub_safe(&mut new_x_pos,1);
         }
         (self.text.line_to_char(new_x_pos as usize),(self.text.line_to_char(self.x_pos as usize)))
     }
@@ -161,7 +157,7 @@ impl Buffer {
     pub fn remove_char(&mut self) {
         let end_idx = self.get_cursor_idx();
         if end_idx > 0 {
-            let start_idx = end_idx - 1;
+            let start_idx = sub_safe(end_idx as u16,1) as usize;
             self.future_states = vec![];
             self.past_states.push(self.text.clone());
             let _ = self.text.try_remove(start_idx..end_idx);
@@ -198,13 +194,14 @@ impl Buffer {
 
         while let Some(c) = chars_cursor.next() {
             if !c.is_alphabetic() {
-                end_current_word += 1;
+                mut_add_safe(&mut end_current_word,1);
                 break;
             }
-            end_current_word += 1;
+            mut_add_safe(&mut end_current_word,1);
         }
         end_current_word
     }
+
     pub fn find_next_word(&self) -> u16 {
         let line_chars = self.current_line_chars();
         let end_current_word = self.end_current_word();
@@ -214,10 +211,10 @@ impl Buffer {
             let mut start_next_word = end_current_word.clone();
             while let Some(c) = chars_end_word.next() {
                 if c.is_alphabetic() {
-                    start_next_word += 1;
+                    mut_add_safe(&mut start_next_word,1);
                     break;
                 } else {
-                    start_next_word += 1;
+                    mut_add_safe(&mut start_next_word,1);
                 }
             }
             start_next_word
@@ -233,10 +230,10 @@ impl Buffer {
 
         while let Some(c) = chars_cursor.next() {
             if !c.is_alphabetic() {
-                start_current_word -= 1;
+                mut_sub_safe(&mut start_current_word,1);
                 break;
             }
-            start_current_word -= 1;
+            mut_sub_safe(&mut start_current_word,1);
         }
 
         if start_current_word != self.x_pos {
@@ -244,10 +241,10 @@ impl Buffer {
             let mut start_last_word = start_current_word.clone();
             while let Some(c) = chars_end_word.next() {
                 if c.is_alphabetic() {
-                    start_last_word -= 1;
+                    mut_sub_safe(&mut start_last_word,1);
                     break;
                 } else {
-                    start_last_word -= 1;
+                    mut_sub_safe(&mut start_last_word,1);
                 }
             }
             start_last_word
@@ -280,11 +277,11 @@ impl Buffer {
         }
 
         if end_idx < start_idx {
-            for line in end_idx - 1..start_idx {
+            for line in sub_safe(end_idx as u16,1) as usize..start_idx {
                 str_vec.push(self.text.line(line).to_string())
             }
         } else {
-            for line in start_idx - 1..end_idx {
+            for line in sub_safe(start_idx as u16,1) as usize..end_idx {
                 str_vec.push(self.text.line(line).to_string())
             }
         }
@@ -299,9 +296,9 @@ impl Buffer {
     pub fn move_to_last_line(&mut self) {
         let line_count = self.text.len_lines() as u16;
         self.x_pos = 0;
-        self.y_pos = line_count - 1;
+        self.y_pos = sub_safe(line_count,1);
         if line_count > self.page_size {
-            self.current_page = (line_count - self.page_size) - 1;
+            self.current_page = sub_safe(sub_safe(line_count,self.page_size),1);
         } else {
             self.current_page = line_count;
         }
@@ -316,11 +313,11 @@ impl Buffer {
     pub fn move_to_line_number(&mut self, line_number: usize) {
         let line_count = self.text.len_lines() as usize;
         if line_number < line_count {
-            self.y_pos = (line_number - 1) as u16;
+            self.y_pos = sub_safe(line_number as u16,1);
             self.x_pos = 0;
             if line_number >= self.page_size as usize {
-                self.current_page = ((line_number - (line_number % self.page_size as usize))
-                    - self.page_size as usize) as u16
+                self.current_page = sub_safe(sub_safe(line_number as u16,(line_number % self.page_size as usize) as u16)
+                   ,self.page_size)
             } else {
                 self.current_page = 0
             }
@@ -338,7 +335,7 @@ impl Buffer {
         self.past_states.push(self.text.clone());
         self.future_states = vec![];
         self.x_pos = 0;
-        self.y_pos += 1;
+        mut_add_safe(&mut self.y_pos,1);
         let _ = self.text.try_insert_char(char_idx, '\n');
     }
 
@@ -412,18 +409,18 @@ impl Buffer {
         self.future_states = vec![];
         let char_idx = self.get_cursor_idx();
         if self.text.try_insert(char_idx, &chars).is_ok() {
-            self.x_pos += chars.len() as u16;
+            mut_add_safe(&mut self.x_pos, chars.len() as u16);
         }
     }
     pub fn append_return(&mut self) {
-        let char_idx = self.get_cursor_idx() + 1;
+        let char_idx = add_safe(self.get_cursor_idx() as u16,1);
         self.past_states.push(self.text.clone());
         self.future_states = vec![];
-        if self.text.try_insert_char(char_idx, '\n').is_ok() {
-            self.y_pos += 1;
+        if self.text.try_insert_char(char_idx as usize, '\n').is_ok() {
+            mut_add_safe(&mut self.y_pos, 1);
             self.x_pos = 0;
-        } else if self.text.try_insert_char(char_idx - 1, '\n').is_ok() {
-            self.y_pos += 1;
+        } else if self.text.try_insert_char(sub_safe(char_idx,1) as usize, '\n').is_ok() {
+            mut_add_safe(&mut self.y_pos, 1);
             self.x_pos = 0;
         }
     }
@@ -431,11 +428,11 @@ impl Buffer {
     pub fn append_chars(&mut self, chars: &str) {
         self.past_states.push(self.text.clone());
         self.future_states = vec![];
-        let char_idx = self.get_cursor_idx() + 1;
-        if self.text.try_insert(char_idx, &chars).is_ok() {
-            self.x_pos += chars.len() as u16;
-        } else if self.text.try_insert(char_idx - 1, &chars).is_ok() {
-            self.x_pos += chars.len() as u16;
+        let char_idx = add_safe(self.get_cursor_idx() as u16,1);
+        if self.text.try_insert(char_idx as usize, &chars).is_ok() {
+            mut_add_safe(&mut self.x_pos,chars.len() as u16);
+        } else if self.text.try_insert(sub_safe(char_idx,1) as usize, &chars).is_ok() {
+            mut_add_safe(&mut self.x_pos,chars.len() as u16);
         }
     }
 

@@ -9,6 +9,7 @@ use crate::{
     Buffer, Ui, Window,
 };
 
+use crate::{add_safe,sub_safe};
 use anyhow::Result as AnyHowResult;
 use crossterm::{
     event::EnableMouseCapture,
@@ -204,8 +205,8 @@ impl App {
                         .map(|n| (n.data().0, Uuid::new_v4()));
                     self.get_mut_window().map(|w| {
                         w.area = Some(split1);
-                        w.x_offset = split1.x + 4;
-                        w.y_offset = split1.y + 1;
+                        w.x_offset = add_safe(split1.x,4);
+                        w.y_offset = add_safe(split1.y,1);
                     });
                     self.current_buffer_id = current_buffer_id;
                     self.current_window_id = current_window_id;
@@ -570,7 +571,7 @@ impl App {
                     for idx in start..end {
                         buffer.move_to_line_number(idx);
                         buffer.delete_line_direct();
-                        let _ = window.remove_cache_line(idx - 1 as usize);
+                        let _ = window.remove_cache_line(sub_safe(idx as u16,1) as usize);
                     }
 
                     let change = WindowChange {
@@ -613,7 +614,7 @@ impl App {
             }
             CommandToken::Remove => {
                 self.command_text = self.command_text.clone().map(|mut t| {
-                    t.truncate(t.len() - 1);
+                    t.truncate(sub_safe(t.len() as u16,1) as usize);
                     t
                 });
                 self.render_ui();
@@ -774,7 +775,7 @@ impl App {
             }
             MotionToken::Last => {
                 if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.x_pos = (buffer.current_line_len() - 2) as u16;
+                    buffer.x_pos = sub_safe(buffer.current_line_len() as u16,2);
                     let change = WindowChange {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
@@ -791,7 +792,7 @@ impl App {
             }
             MotionToken::LastNonBlank => {
                 if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.x_pos = (buffer.current_line_len() - 2) as u16;
+                    buffer.x_pos = sub_safe(buffer.current_line_len() as u16,2);
                     let change = WindowChange {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
