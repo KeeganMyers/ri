@@ -5,15 +5,17 @@ use ri::{
     parser::{Parser, UserInput},
     token::{display_token::DisplayToken, Token},
 };
-use ri::{setup_logger, Cli};
+use ri::{setup_logger, Cli,rls::embed_rls};
 use std::time::Duration;
 
 use std::error::Error;
 extern crate log;
 
-fn main() -> Result<(), Box<dyn Error>> {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let cli: Cli = argh::from_env();
     let _ = setup_logger();
+    embed_rls().await?;
     let mut app = App::new(cli.file_name)?;
     app.handle_tokens(vec![Token::Display(DisplayToken::DrawViewPort)]);
     let mut parser = Parser::new();

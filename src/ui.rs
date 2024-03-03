@@ -1,14 +1,16 @@
 use crate::Mode;
 use crate::Window;
 use std::io::Stdout;
+use std::rc::Rc;
 
-use tui::{
-    backend::{Backend, CrosstermBackend},
+use ratatui::{
+    backend::{CrosstermBackend},
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     widgets::{Block, Paragraph, Wrap},
     Frame, Terminal,
 };
+
 use uuid::Uuid;
 pub type Term = Terminal<CrosstermBackend<Stdout>>;
 
@@ -47,7 +49,7 @@ impl Ui {
         });
     }
 
-    pub fn split_ui(&self, window: &Window, direction: Direction) -> Vec<Rect> {
+    pub fn split_ui(&self, window: &Window, direction: Direction) -> Rc<[Rect]> {
         let text_area = if let Some(area) = window.area {
             area
         } else {
@@ -59,7 +61,7 @@ impl Ui {
             .split(text_area)
     }
 
-    pub fn draw<'a, B: 'a>(
+    pub fn draw(
         current_window_id: &Uuid,
         mode: &Mode,
         coords: Option<(u16, u16)>,
@@ -67,9 +69,8 @@ impl Ui {
         foot_area: Rect,
         text_area: Rect,
         window_widgets: Vec<&Window>,
-        f: &mut Frame<'a, B>,
-    ) where
-        B: Backend,
+        f: &mut Frame
+    )
     {
         for window in window_widgets {
             if window.id == *current_window_id {
@@ -82,21 +83,20 @@ impl Ui {
         Self::draw_footer(mode, coords, command_text, f, foot_area);
     }
 
-    fn create_layout<B: Backend>(frame: &Frame<B>) -> (Rect, Rect) {
+    fn create_layout(frame: &Frame) -> (Rect, Rect) {
         let area = Layout::default()
             .constraints([Constraint::Min(20), Constraint::Length(1)].as_ref())
             .split(frame.size());
         (area[0], area[1])
     }
 
-    fn draw_footer<B>(
+    fn draw_footer(
         mode: &Mode,
         coords: Option<(u16, u16)>,
         command_text: &Option<String>,
-        f: &mut Frame<B>,
+        f: &mut Frame,
         area: Rect,
-    ) where
-        B: Backend,
+    )
     {
         let block = Block::default().style(Style::default().fg(Color::Black).bg(Color::White));
         let paragraph = Paragraph::new(command_text.clone().unwrap_or_default())

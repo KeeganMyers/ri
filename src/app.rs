@@ -20,7 +20,7 @@ use id_tree::{InsertBehavior::*, Node, NodeId, RemoveBehavior::*, Tree};
 use log::trace;
 use std::collections::HashMap;
 use std::io::stdout;
-use tui::{
+use ratatui::{
     backend::CrosstermBackend,
     layout::{Direction, Rect},
     Terminal,

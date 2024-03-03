@@ -2,8 +2,7 @@ use anyhow::Error as AnyHowError;
 use crossterm::event::KeyEvent as Key;
 use ropey::Rope;
 use std::{convert::TryFrom, iter::Iterator};
-use tui::layout::Direction;
-use tui::layout::Rect;
+use ratatui::layout::{Rect,Direction};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

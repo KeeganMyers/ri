@@ -13,11 +13,11 @@ use syntect::{
     highlighting::{Theme, ThemeSet},
     parsing::{SyntaxReference, SyntaxSet},
 };
-use tui::{
+use ratatui::{
     buffer::Buffer as TuiBuffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
-    text::{Span, Spans, StyledGrapheme},
+    text::{Span, Line, StyledGrapheme},
     widgets::{BorderType, Widget},
 };
 use uuid::Uuid;
@@ -81,7 +81,7 @@ pub struct Window {
 impl Widget for &Window {
     fn render(self, _area: Rect, buf: &mut TuiBuffer) {
         if let Some(area) = self.area {
-            self.render_border(&area, buf);
+            //self.render_border(&area, buf);
             let main_area = Layout::default()
                 .direction(Direction::Vertical)
                 .constraints([Constraint::Length(1), Constraint::Percentage(99)].as_ref())
@@ -102,27 +102,27 @@ impl Widget for &Window {
                 .highlight_cache
                 .iter()
                 .map(|outer| {
-                    Spans::from(
+                    Line::from(
                         outer
                             .iter()
-                            .map(|inner| inner.deref().into())
+                            .map(|inner| inner.into())
                             .collect::<Vec<Span>>(),
                     )
                 })
-                .collect::<Vec<Spans>>();
+                .collect::<Vec<Line>>();
 
             let line_number_spans = self
                 .line_num_cache
                 .iter()
                 .map(|outer| {
-                    Spans::from(
+                    Line::from(
                         outer
                             .iter()
-                            .map(|inner| inner.deref().into())
+                            .map(|inner| inner.into())
                             .collect::<Vec<Span>>(),
                     )
                 })
-                .collect::<Vec<Spans>>();
+                .collect::<Vec<Line>>();
             self.render_text(line_number_area, line_number_spans, buf);
             self.render_text(text_area, spans, buf);
         }
@@ -143,7 +143,7 @@ impl Window {
             }
         }
     }
-
+    /*
     fn render_border(&self, area: &Rect, buf: &mut TuiBuffer) {
         let style = Style::default();
         buf.set_style(*area, style);
@@ -195,6 +195,7 @@ impl Window {
             .set_symbol(symbols.top_left)
             .set_style(style);
     }
+    */
 
     pub fn cache_window_content(&mut self, text: &Rope) {
         self.cache_formatted_text(&text);
@@ -311,14 +312,13 @@ impl Window {
         }
     }
 
-    pub fn render_text(&self, text_area: Rect, text: Vec<Spans>, buf: &mut TuiBuffer) {
+    pub fn render_text(&self, text_area: Rect, text: Vec<Line>, buf: &mut TuiBuffer) {
         if text_area.height < 1 {
             return;
         }
 
         let mut styled = text.iter().flat_map(|spans| {
             spans
-                .0
                 .iter()
                 .flat_map(|span| span.styled_graphemes(Style::default()))
                 .chain(iter::once(StyledGrapheme {
