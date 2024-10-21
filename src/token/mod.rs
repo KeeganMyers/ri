@@ -2,21 +2,21 @@ pub mod append_token;
 pub mod command_token;
 pub mod display_token;
 pub mod insert_token;
+pub mod motion_token;
 pub mod normal_token;
 pub mod operator_token;
-pub mod motion_token;
 use anyhow::{Error as AnyHowError, Result as AnyHowResult};
 use crossterm::event::KeyEvent as Key;
 use std::convert::TryFrom;
 
 use crate::Mode;
-pub use append_token::*;
-pub use motion_token::*;
-pub use command_token::*;
-pub use display_token::*;
-pub use insert_token::*;
-pub use normal_token::*;
-pub use operator_token::*;
+pub use append_token::AppendToken;
+pub use command_token::CommandToken;
+pub use display_token::DisplayToken;
+pub use insert_token::InsertToken;
+pub use motion_token::MotionToken;
+pub use normal_token::NormalToken;
+pub use operator_token::OperatorToken;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Token {

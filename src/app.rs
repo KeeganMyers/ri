@@ -1,15 +1,14 @@
 use crate::{
     token::{
         display_token::{DisplayToken, WindowChange},
-        get_token_from_chars, AppendToken, CommandToken, InsertToken, NormalToken, OperatorToken,
-        MotionToken,
-        Token,
+        get_token_from_chars, AppendToken, CommandToken, InsertToken, MotionToken, NormalToken,
+        OperatorToken, Token,
     },
     ui::Term,
     Buffer, Ui, Window,
 };
 
-use crate::{add_safe,sub_safe};
+use crate::{add_safe, sub_safe};
 use anyhow::Result as AnyHowResult;
 use crossterm::{
     event::EnableMouseCapture,
@@ -18,13 +17,13 @@ use crossterm::{
 };
 use id_tree::{InsertBehavior::*, Node, NodeId, RemoveBehavior::*, Tree};
 use log::trace;
-use std::collections::HashMap;
-use std::io::stdout;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Direction, Rect},
     Terminal,
 };
+use std::collections::HashMap;
+use std::io::stdout;
 use uuid::Uuid;
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -205,8 +204,8 @@ impl App {
                         .map(|n| (n.data().0, Uuid::new_v4()));
                     self.get_mut_window().map(|w| {
                         w.area = Some(split1);
-                        w.x_offset = add_safe(split1.x,4);
-                        w.y_offset = add_safe(split1.y,1);
+                        w.x_offset = add_safe(split1.x, 4);
+                        w.y_offset = add_safe(split1.y, 1);
                     });
                     self.current_buffer_id = current_buffer_id;
                     self.current_window_id = current_window_id;
@@ -571,7 +570,7 @@ impl App {
                     for idx in start..end {
                         buffer.move_to_line_number(idx);
                         buffer.delete_line_direct();
-                        let _ = window.remove_cache_line(sub_safe(idx as u16,1) as usize);
+                        let _ = window.remove_cache_line(sub_safe(idx as u16, 1) as usize);
                     }
 
                     let change = WindowChange {
@@ -614,7 +613,7 @@ impl App {
             }
             CommandToken::Remove => {
                 self.command_text = self.command_text.clone().map(|mut t| {
-                    t.truncate(sub_safe(t.len() as u16,1) as usize);
+                    t.truncate(sub_safe(t.len() as u16, 1) as usize);
                     t
                 });
                 self.render_ui();
@@ -660,50 +659,57 @@ impl App {
         unimplemented!()
     }
 
-    pub fn handle_operator_token_range(&mut self, token: OperatorToken, start_range: usize, end_range: usize) {
+    pub fn handle_operator_token_range(
+        &mut self,
+        token: OperatorToken,
+        start_range: usize,
+        end_range: usize,
+    ) {
         match token {
             OperatorToken::Yank => {
-                self.get_buffer().map(|b| b.yank_line_range(start_range,end_range));
-            },
+                self.get_buffer()
+                    .map(|b| b.yank_line_range(start_range, end_range));
+            }
             OperatorToken::Delete => {
-                self.get_mut_buffer().map(|b| b.delete_line_range(start_range,end_range));
-            },
+                self.get_mut_buffer()
+                    .map(|b| b.delete_line_range(start_range, end_range));
+            }
             OperatorToken::Change => {
                 unimplemented!()
-            },
+            }
             OperatorToken::Indent => {
                 unimplemented!()
-            },
+            }
             OperatorToken::UnIndent => {
                 unimplemented!()
-            },
+            }
             OperatorToken::Uppercase => {
                 unimplemented!()
-            },
+            }
             OperatorToken::Lowercase => {
                 unimplemented!()
-            },
+            }
             OperatorToken::ToggleCase => {
                 unimplemented!()
-            },
+            }
             OperatorToken::Esc => {
                 self.set_normal_mode();
                 self.get_mut_buffer().map(|b| b.start_select_pos = None);
-            },
+            }
             OperatorToken::Remove => {
                 unimplemented!()
-            },
-            _ => ()
+            }
+            _ => (),
         }
     }
 
-    pub fn handle_motion_token_range(&mut self, token: MotionToken) -> Option<(usize,usize)> {
+    pub fn handle_motion_token_range(&mut self, token: MotionToken) -> Option<(usize, usize)> {
         match token {
             MotionToken::Up => self.get_buffer().map(|b| b.on_up_range()),
             MotionToken::Down => self.get_buffer().map(|b| b.on_down_range()),
             MotionToken::Left => self.get_buffer().map(|b| b.on_left_range()),
             MotionToken::Right => self.get_buffer().map(|b| b.on_right_range()),
-            _ => None
+            _ => None,
         }
     }
 
@@ -775,7 +781,7 @@ impl App {
             }
             MotionToken::Last => {
                 if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.x_pos = sub_safe(buffer.current_line_len() as u16,2);
+                    buffer.x_pos = sub_safe(buffer.current_line_len() as u16, 2);
                     let change = WindowChange {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
@@ -792,7 +798,7 @@ impl App {
             }
             MotionToken::LastNonBlank => {
                 if let Some(buffer) = self.get_mut_buffer() {
-                    buffer.x_pos = sub_safe(buffer.current_line_len() as u16,2);
+                    buffer.x_pos = sub_safe(buffer.current_line_len() as u16, 2);
                     let change = WindowChange {
                         id: buffer.id,
                         x_pos: buffer.x_pos,
@@ -926,7 +932,7 @@ impl App {
 
                 self.render_ui();
             }
-            _ => ()
+            _ => (),
         }
     }
 
@@ -936,7 +942,7 @@ impl App {
             if let Token::Operator(_) = *t {
                 true
             } else {
-            false
+                false
             }
         });
         let operator = if let Some(idx) = operator_idx {
@@ -952,13 +958,15 @@ impl App {
                 Token::Insert(t) => self.handle_insert_token(t),
                 Token::Operator(t) => self.handle_operator_token(t),
                 Token::Display(t) => self.handle_display_token(t),
-                Token::Motion(t) if operator_idx.is_some() =>  {
-                    if let (Some((start_range,end_range)),Some(Token::Operator(o))) = (self.handle_motion_token_range(t),&operator) {
-                        self.handle_operator_token_range(o.clone(),start_range,end_range);
+                Token::Motion(t) if operator_idx.is_some() => {
+                    if let (Some((start_range, end_range)), Some(Token::Operator(o))) =
+                        (self.handle_motion_token_range(t), &operator)
+                    {
+                        self.handle_operator_token_range(o.clone(), start_range, end_range);
                     }
                     ()
-                },
-                Token::Motion(t)  => self.handle_motion_token(t),
+                }
+                Token::Motion(t) => self.handle_motion_token(t),
             }
         }
     }

@@ -27,7 +27,7 @@ unicode-width = "0.1"
 async-std = {version = "1.12.0",features = ["attributes"]}
 crossterm = "0.26.0"
 id_tree = "1.8.0"
-lsp-types = { version = "0.94" }
+lsp-types = "0.95"
 ra_ap_rust-analyzer = "0.0.200"
 lsp-server = "0.7.6"
 serde = { version = "1.0.197", features = ["derive"] }

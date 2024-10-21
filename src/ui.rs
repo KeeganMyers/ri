@@ -4,7 +4,7 @@ use std::io::Stdout;
 use std::rc::Rc;
 
 use ratatui::{
-    backend::{CrosstermBackend},
+    backend::CrosstermBackend,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     widgets::{Block, Paragraph, Wrap},
@@ -69,9 +69,8 @@ impl Ui {
         foot_area: Rect,
         text_area: Rect,
         window_widgets: Vec<&Window>,
-        f: &mut Frame
-    )
-    {
+        f: &mut Frame,
+    ) {
         for window in window_widgets {
             if window.id == *current_window_id {
                 f.set_cursor(window.cursor_x_pos(), window.cursor_y_pos());
@@ -96,8 +95,7 @@ impl Ui {
         command_text: &Option<String>,
         f: &mut Frame,
         area: Rect,
-    )
-    {
+    ) {
         let block = Block::default().style(Style::default().fg(Color::Black).bg(Color::White));
         let paragraph = Paragraph::new(command_text.clone().unwrap_or_default())
             .block(block.clone())

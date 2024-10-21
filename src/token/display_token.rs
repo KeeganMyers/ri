@@ -1,8 +1,8 @@
 use anyhow::Error as AnyHowError;
 use crossterm::event::KeyEvent as Key;
+use ratatui::layout::{Direction, Rect};
 use ropey::Rope;
 use std::{convert::TryFrom, iter::Iterator};
-use ratatui::layout::{Rect,Direction};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

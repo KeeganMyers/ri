@@ -1,11 +1,11 @@
 pub mod app;
 pub mod buffer;
+pub mod lsp;
 pub mod parser;
 pub mod reflow;
 pub mod token;
 pub mod ui;
 pub mod window;
-pub mod rls;
 
 use crate::{app::Mode, buffer::Buffer, ui::Ui, window::Window};
 
@@ -23,12 +23,12 @@ use log4rs::{
 };
 extern crate log;
 
-fn add_safe(n: u16, other: u16) -> u16{
-   (n).checked_add(other).unwrap_or(n)
+fn add_safe(n: u16, other: u16) -> u16 {
+    (n).checked_add(other).unwrap_or(n)
 }
 
-fn sub_safe(n: u16, other: u16) -> u16{
-   (n).checked_sub(other).unwrap_or(n)
+fn sub_safe(n: u16, other: u16) -> u16 {
+    (n).checked_sub(other).unwrap_or(n)
 }
 
 fn mut_add_safe(n: &mut u16, other: u16) {
@@ -38,7 +38,6 @@ fn mut_add_safe(n: &mut u16, other: u16) {
 fn mut_sub_safe(n: &mut u16, other: u16) {
     *n = (*n).checked_sub(other).unwrap_or(*n);
 }
-
 
 #[derive(Debug, FromArgs)]
 #[argh(description = "")]

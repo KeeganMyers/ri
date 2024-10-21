@@ -5,7 +5,7 @@ use ri::{
     parser::{Parser, UserInput},
     token::{display_token::DisplayToken, Token},
 };
-use ri::{setup_logger, Cli,rls::embed_rls};
+use ri::{lsp::embed_rls, setup_logger, Cli};
 use std::time::Duration;
 
 use std::error::Error;

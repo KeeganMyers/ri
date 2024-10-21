@@ -22,10 +22,16 @@ impl Parser {
         } else if let KeyCode::Char(c) = event.code {
             self.token_str.push(c);
             let tokens = get_tokens_from_chars(mode, &self.token_str);
-            if !tokens.is_empty() && tokens.iter().filter(|t| match t {
-                Token::Operator(_) => false,
-                _ => true
-            }).count() >= 1 {
+            if !tokens.is_empty()
+                && tokens
+                    .iter()
+                    .filter(|t| match t {
+                        Token::Operator(_) => false,
+                        _ => true,
+                    })
+                    .count()
+                    >= 1
+            {
                 self.token_str.truncate(0);
                 return tokens;
             }

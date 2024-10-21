@@ -1,8 +1,15 @@
+use crate::{add_safe, sub_safe};
 use crate::{
     reflow::{LineComposer, WordWrapper},
     token::display_token::*,
 };
-use crate::{add_safe,sub_safe};
+use ratatui::{
+    buffer::Buffer as TuiBuffer,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
+    style::{Color, Style},
+    text::{Line, Span, StyledGrapheme},
+    widgets::Widget,
+};
 use ropey::Rope;
 use std::iter;
 use std::sync::Arc;
@@ -13,16 +20,8 @@ use syntect::{
     highlighting::{Theme, ThemeSet},
     parsing::{SyntaxReference, SyntaxSet},
 };
-use ratatui::{
-    buffer::Buffer as TuiBuffer,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    text::{Span, Line, StyledGrapheme},
-    widgets::{BorderType, Widget},
-};
 use uuid::Uuid;
 
-use std::ops::Deref;
 use unicode_width::UnicodeWidthStr;
 
 #[derive(Debug, Copy, Clone)]
@@ -336,8 +335,8 @@ impl Window {
                     Self::get_line_offset(current_line_width, text_area.width, Alignment::Left);
                 for StyledGrapheme { symbol, style } in current_line {
                     buf.get_mut(
-                        add_safe(add_safe(text_area.left(),x),1),
-                        sub_safe(add_safe(text_area.top(), y),self.current_page),
+                        add_safe(add_safe(text_area.left(), x), 1),
+                        sub_safe(add_safe(text_area.top(), y), self.current_page),
                     )
                     .set_symbol(if symbol.is_empty() { " " } else { symbol })
                     .set_style(*style);
@@ -345,7 +344,7 @@ impl Window {
                 }
             }
             y += 1;
-            if y >= add_safe(sub_safe(text_area.height,2),self.current_page) {
+            if y >= add_safe(sub_safe(text_area.height, 2), self.current_page) {
                 break;
             }
         }
@@ -361,8 +360,8 @@ impl Window {
                 page_size: change.page_size,
                 current_page: change.current_page,
                 area: Some(area),
-                y_offset: add_safe(area.y,1),
-                x_offset: add_safe(area.x,4),
+                y_offset: add_safe(area.y, 1),
+                x_offset: add_safe(area.x, 4),
                 ..Window::default()
             }
         } else {
@@ -382,26 +381,26 @@ impl Window {
     pub fn cursor_x_pos(&self) -> u16 {
         let area = self.area.unwrap_or_default();
         if self.display_x_pos() >= area.right() {
-            sub_safe(area.right(),1)
+            sub_safe(area.right(), 1)
         } else {
             self.display_x_pos()
         }
     }
     pub fn display_x_pos(&self) -> u16 {
-        add_safe(self.x_pos,self.x_offset)
+        add_safe(self.x_pos, self.x_offset)
     }
 
     pub fn cursor_y_pos(&self) -> u16 {
         let area = self.area.unwrap_or_default();
         if self.display_y_pos() >= area.bottom() {
-            sub_safe(area.bottom(),3)
+            sub_safe(area.bottom(), 3)
         } else {
             self.display_y_pos()
         }
     }
 
     pub fn display_y_pos(&self) -> u16 {
-        sub_safe(add_safe(self.y_pos,self.y_offset),self.current_page)
+        sub_safe(add_safe(self.y_pos, self.y_offset), self.current_page)
     }
 
     pub fn get_origin(&self) -> Option<(u16, u16)> {
